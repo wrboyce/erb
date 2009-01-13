@@ -43,13 +43,13 @@ get_config(erb_connector) ->
 	{ok, {state, "irc.freenode.net", 6667}};
 get_config(erb_router) ->
 	% state{nick, chans}
-	{ok, {state, "Erb", ["#geekup"]}};
+	{ok, {state, "Erb__GitHub", ["#geekup"]}};
 get_config(erb_dispatcher) ->
 	% state{}
 	{ok, {state}};
 get_config(erb_handler_nickserv) ->
 	% state{nick, user, pass}
-	{ok, {state, "Erb", "Erb", "erlpass"}};
+	{ok, {state, "WantNick", "NickServUser", "NickServPass"}};
 get_config(_) ->
 	noconfig.
 
