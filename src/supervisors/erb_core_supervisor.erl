@@ -1,9 +1,9 @@
 %% -------------------------------------------------------------------
 %% @author Will Boyce <mail@willboyce.com> [http://willboyce.com]
 %% @copyright 2008 Will Boyce
-%% @doc Top level supervisor for Erb
+%% @doc Supervisor for the core processes
 %% -------------------------------------------------------------------
--module(erb_supervisor).
+-module(erb_core_supervisor).
 -author("Will Boyce").
 
 -behaviour(supervisor).
@@ -40,32 +40,32 @@ start_link() ->
 %% specifications.
 %% -------------------------------------------------------------------
 init([]) ->
-	ConfigServer		= {erb_config_server,
-							{erb_config_server, start_link, []},
-							permanent,
-							2000,
-							worker,
-							[erb_config_server]},
-	CoreSupervisor		= {erb_core_supervisor,
-							{erb_core_supervisor, start_link, []},
-							permanent,
-							infinity,
-							supervisor,
-							[erb_core_supervisor]},
-	ModuleSupervisor	= {erb_module_supervisor,
-							{erb_module_supervisor, start_link, []},
-							permanent,
-							infinity,
-							supervisor,
-							[erb_module_supervisor]},
-	HandlerSupervisor	= {erb_handler_supervisor,
-							{erb_handler_supervisor, start_link, []},
-							permanent,
-							infinity,
-							supervisor,
-							[erb_handler_supervisor]},
+	Router			= {erb_router,{
+						erb_router, start_link, []},
+						permanent,
+						2000,
+						worker,
+						dynamic},
+	Dispatcher		= {erb_dispatcher,
+						{erb_dispatcher, start_link, []},
+						permanent,
+						2000,
+						worker,
+						[erb_dispatcher]},
+	Processor		= {erb_processor,
+						{erb_processor, start_link, []},
+						permanent,
+						2000,
+						worker,
+						[erb_router]},
+	Connector		= {erb_connector,
+						{erb_connector, start_link, []},
+						permanent,
+						2000,
+						worker,
+						[erb_connector]},
 
-    {ok, {{one_for_all, 5, 60}, [ConfigServer, CoreSupervisor, ModuleSupervisor, HandlerSupervisor]}}.
+    {ok, {{one_for_all, 5, 60}, [Router, Dispatcher, Processor, Connector]}}.
 
 %% ===================================================================
 %% Internal functions

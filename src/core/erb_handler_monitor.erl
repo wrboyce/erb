@@ -3,7 +3,7 @@
 %% @copyright 2008 Will Boyce
 %% @doc Monitor the connection between the event manager and an event handler
 %% -------------------------------------------------------------------
--module(erb_event_monitor).
+-module(erb_handler_monitor).
 -author("Will Boyce").
 -behaviour(gen_server).
 

@@ -35,9 +35,12 @@ start_link() ->
 %% @spec get_config() -> {ok, Config} | noconfig
 %% @doc Returns a processes' initial state
 %% -------------------------------------------------------------------
-get_config(erb_event_supervisor) ->
-	% state{handlers}
+get_config(erb_handler_supervisor) ->
+	% [handlers]
 	{ok, [erb_handler_debug, erb_handler_nickserv, erb_handler_crash]};
+get_config(erb_module_supervisor) ->
+	% [modules]
+	{ok, []};
 get_config(erb_connector) ->
 	% state{server, port}
 	{ok, {state, "irc.freenode.net", 6667}};

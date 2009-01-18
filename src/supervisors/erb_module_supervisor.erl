@@ -1,9 +1,9 @@
 %% -------------------------------------------------------------------
 %% @author Will Boyce <mail@willboyce.com> [http://willboyce.com]
 %% @copyright 2008 Will Boyce
-%% @doc Supervisor for Event Handler Monitors
+%% @doc Supervisor for Modules
 %% -------------------------------------------------------------------
--module(erb_event_supervisor).
+-module(erb_module_supervisor).
 -author("Will Boyce").
 -behaviour(supervisor).
 
@@ -40,11 +40,11 @@ start_link() ->
 %% -------------------------------------------------------------------
 init([]) ->
 	case erb_config_server:get_config(?SERVER) of
-		{ok, Handlers} ->
-			ChildSpecs = lists:map(fun(H) ->
-				{H, {erb_event_monitor, start_link, [H]}, permanent, 2000, worker, [H]}
-			end, Handlers),
-			{ok, {{one_for_one, 1, 10}, ChildSpecs}};
+		{ok, Modules} ->
+			ChildSpecs = lists:map(fun(M) ->
+				{M, {M, start_link, []}, permanent, 2000, worker, [M]}
+			end, Modules),
+			{ok, {{one_for_one, 5, 60}, ChildSpecs}};
 		noconfig ->
 			{error, config_error}
 	end.

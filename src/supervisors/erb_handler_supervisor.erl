@@ -1,11 +1,10 @@
 %% -------------------------------------------------------------------
 %% @author Will Boyce <mail@willboyce.com> [http://willboyce.com]
 %% @copyright 2008 Will Boyce
-%% @doc Top level supervisor for Erb
+%% @doc Supervisor for Event Handler Monitors
 %% -------------------------------------------------------------------
--module(erb_supervisor).
+-module(erb_handler_supervisor).
 -author("Will Boyce").
-
 -behaviour(supervisor).
 
 %% API
@@ -14,7 +13,7 @@
 %% Supervisor callbacks
 -export([init/1]).
 
-%% Server macro
+% Server macro
 -define(SERVER, ?MODULE).
 
 %% ===================================================================
@@ -40,32 +39,15 @@ start_link() ->
 %% specifications.
 %% -------------------------------------------------------------------
 init([]) ->
-	ConfigServer		= {erb_config_server,
-							{erb_config_server, start_link, []},
-							permanent,
-							2000,
-							worker,
-							[erb_config_server]},
-	CoreSupervisor		= {erb_core_supervisor,
-							{erb_core_supervisor, start_link, []},
-							permanent,
-							infinity,
-							supervisor,
-							[erb_core_supervisor]},
-	ModuleSupervisor	= {erb_module_supervisor,
-							{erb_module_supervisor, start_link, []},
-							permanent,
-							infinity,
-							supervisor,
-							[erb_module_supervisor]},
-	HandlerSupervisor	= {erb_handler_supervisor,
-							{erb_handler_supervisor, start_link, []},
-							permanent,
-							infinity,
-							supervisor,
-							[erb_handler_supervisor]},
-
-    {ok, {{one_for_all, 5, 60}, [ConfigServer, CoreSupervisor, ModuleSupervisor, HandlerSupervisor]}}.
+	case erb_config_server:get_config(?SERVER) of
+		{ok, Handlers} ->
+			ChildSpecs = lists:map(fun(H) ->
+				{H, {erb_handler_monitor, start_link, [H]}, permanent, 2000, worker, [H]}
+			end, Handlers),
+			{ok, {{one_for_one, 5, 60}, ChildSpecs}};
+		noconfig ->
+			{error, config_error}
+	end.
 
 %% ===================================================================
 %% Internal functions
