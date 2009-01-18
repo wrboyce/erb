@@ -46,8 +46,8 @@ init([]) ->
 						2000,
 						worker,
 						[erb_config_server]},
-	EventManager	= {erb_event_manager,{
-						erb_event_manager, start_link, []},
+	Router			= {erb_router,{
+						erb_router, start_link, []},
 						permanent,
 						2000,
 						worker,
@@ -64,8 +64,8 @@ init([]) ->
 						2000,
 						worker,
 						[erb_dispatcher]},
-	Router			= {erb_router,
-						{erb_router, start_link, []},
+	Processor		= {erb_processor,
+						{erb_processor, start_link, []},
 						permanent,
 						2000,
 						worker,
@@ -77,7 +77,7 @@ init([]) ->
 						worker,
 						[erb_connector]},
 
-    {ok, {{one_for_all, 1, 60}, [ConfigServer, EventManager, EventSupervisor, Dispatcher, Router, Connector]}}.
+    {ok, {{one_for_all, 1, 60}, [ConfigServer, Router, EventSupervisor, Dispatcher, Processor, Connector]}}.
 
 %% ===================================================================
 %% Internal functions

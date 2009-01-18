@@ -56,7 +56,7 @@ init([]) ->
 		{ok, {state, Server, Port}} ->
 			case gen_tcp:connect(Server, Port, [{packet, line}, {active, true}]) of
 				{ok, Sock} ->
-					erb_router:register(),
+					erb_processor:register(),
 					{ok, #state{server=Server, port=Port, sock=Sock}};
 				_ ->
 					{stop, socket_error}
@@ -135,5 +135,5 @@ code_change(_OldVsn, State, _Extra) ->
 dispatch([]) ->
 	ok;
 dispatch([Line|Lines]) ->
-	erb_router:route(Line),
+	erb_processor:process(Line),
 	dispatch(Lines).

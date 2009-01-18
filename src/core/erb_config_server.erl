@@ -41,7 +41,7 @@ get_config(erb_event_supervisor) ->
 get_config(erb_connector) ->
 	% state{server, port}
 	{ok, {state, "irc.freenode.net", 6667}};
-get_config(erb_router) ->
+get_config(erb_processor) ->
 	% state{nick, chans}
 	{ok, {state, "Erb__GitHub", ["#geekup"]}};
 get_config(erb_dispatcher) ->

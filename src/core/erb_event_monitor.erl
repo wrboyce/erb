@@ -41,8 +41,8 @@ start_link(Handler) ->
 %% @doc Initiates the server
 %% -------------------------------------------------------------------
 init(Handler) ->
-	io:format("Attaching handler ~p to erb_event_manager~n", [Handler]),
-	ok = gen_event:add_sup_handler(erb_event_manager, Handler, []),
+	io:format("Attaching handler ~p to erb_router~n", [Handler]),
+	ok = gen_event:add_sup_handler(erb_router, Handler, []),
     {ok, #state{handler=Handler}}.
 
 %% -------------------------------------------------------------------
