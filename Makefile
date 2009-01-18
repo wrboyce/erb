@@ -1,5 +1,5 @@
 all:
-	erlc -I include/ -o ebin/ src/*.erl
+	find src/ -name \*.erl -exec erlc -I include/ -o ebin/ {} \+
 
 clean:
 	rm ebin/*.beam
