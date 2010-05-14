@@ -65,10 +65,12 @@ handle_call(_Request, _From, State) ->
 %% @doc Handling cast messages
 %% -------------------------------------------------------------------
 handle_cast({pong, Server}, State) ->
+    error_logger:info_msg("Ping? Pong!~n"),
     ok = gen_server:cast({global, erb_connector}, {sendline, irc_lib:pong(Server)}),
     {noreply, State};
 
 handle_cast({register, Nick}, State) ->
+    error_logger:info_msg("Registering with server as ~s...~n", [Nick]),
     ok = gen_server:cast({global, erb_connector}, {sendline, irc_lib:register(Nick)}),
     ok = gen_server:cast({global, erb_connector}, {sendline, irc_lib:register(Nick, "localhost", "localhost", "Erb [http://github.com/wrboyce/erb]")}),
     {noreply, State};
@@ -78,10 +80,12 @@ handle_cast({privmsg, Dest, Message}, State) ->
     {noreply, State};
 
 handle_cast({join, Chans}, State) ->
+    error_logger:info_msg("Joining chans: ~s~n", [string:join(Chans, ", ")]),
     ok = gen_server:cast({global, erb_connector}, {sendline, irc_lib:join(Chans)}),
     {noreply, State};
 
 handle_cast(Msg, State) ->
+    error_logger:warning_msg("[erb_dispatcher] unknown cast: ~p~n", [Msg]),
     {noreply, State}.
 
 %% -------------------------------------------------------------------

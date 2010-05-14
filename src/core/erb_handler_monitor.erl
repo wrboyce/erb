@@ -41,7 +41,7 @@ start_link(Handler) ->
 %% @doc Initiates the server
 %% -------------------------------------------------------------------
 init(Handler) ->
-	io:format("Attaching handler ~p to erb_router~n", [Handler]),
+    error_logger:info_msg("Attaching supervised handler ~p to erb_router~n", [Handler]),
     ok = gen_event:add_sup_handler({global, erb_router}, Handler, []),
     {ok, #state{handler=Handler}}.
 
@@ -76,8 +76,7 @@ handle_cast(_Msg, State) ->
 handle_info({gen_event_EXIT, Handler, Reason}, State) ->
     %% gen_event manager sends this message if a handler was added using
     %% gen_event:add_sup_handler/3 or gen_event:swap_sup_handler/3 functions
-    io:format("~w: detected handler ~p shutdown:~n~p~n",
-              [?MODULE, Handler, Reason]),
+    error_logger:error_msg("~w: detected handler ~p shutdown:~p~n", [?MODULE, Handler, Reason]),
     {stop, {handler_died, Handler, Reason}, State};
 handle_info(_Info, State) ->
     {noreply, State}.

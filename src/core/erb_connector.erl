@@ -44,7 +44,7 @@ start_link() ->
 init([]) ->
     case gen_server:call({global, erb_config_server}, {getConfig, server}) of
         {ok, {Server, Port}} ->
-            error_logger:info_msg("Connecting to ~s:~B...~n", [Server, Port]),
+            error_logger:info_msg("Connecting to ~s:~B...", [Server, Port]),
             case gen_tcp:connect(Server, Port, [{packet, line}, {active, true}]) of
                 {ok, Sock} ->
                     error_logger:info_msg("~s:~B connected.~n", [Server, Port]),
@@ -76,6 +76,7 @@ handle_call(_Request, _From, State) ->
 %% @doc Handling cast messages
 %% -------------------------------------------------------------------
 handle_cast({sendline, Data}, State) ->
+    % error_logger:info_msg("TX: ~p~n", [Data]),
     gen_tcp:send(State#state.sock, Data ++ "\r\n"),
     {noreply, State};
 handle_cast(_Request, State) ->
@@ -88,7 +89,6 @@ handle_cast(_Request, State) ->
 %% @doc Handling all non call/cast messages
 %% -------------------------------------------------------------------
 handle_info({tcp, Sock, Data}, State) ->
-	%io:format("~s~n", [Data]),
     Lines = string:tokens(Data, "\r\n"),
     dispatch(Lines),
     {noreply, State#state{sock=Sock}};
@@ -127,5 +127,6 @@ code_change(_OldVsn, State, _Extra) ->
 dispatch([]) ->
     ok;
 dispatch([Line|Lines]) ->
+    % error_logger:info_msg("RX: ~p~n", [Line]),
     gen_fsm:send_event({global, erb_processor}, {recv, Line}),
     dispatch(Lines).

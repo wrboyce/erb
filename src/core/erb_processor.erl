@@ -83,6 +83,7 @@ init([]) ->
 %% -------------------------------------------------------------------
 waiting(connected, State) ->
     ok = gen_server:cast({global, erb_dispatcher}, {register, State#state.nick}),
+    error_logger:info_msg("erb_processor switching state: waiting->registering~n"),
     {next_state, registering, State}.
 
 registering({recv, Line}, State) ->
@@ -97,6 +98,7 @@ registering({recv, Line}, State) ->
         rpl_welcome ->
             ok = gen_server:cast({global, erb_dispatcher}, {join, State#state.chans}),
             ok = gen_event:notify({global, erb_router}, Data),
+            error_logger:info_msg("erb_processor switching state: registering->ready~n"),
             {next_state, ready, State};
         _ ->
             {next_state, registering, State}
