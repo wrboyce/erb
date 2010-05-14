@@ -62,12 +62,13 @@ process(Line) ->
 %% initialize. 
 %% -------------------------------------------------------------------
 init([]) ->
-	case erb_config_server:get_config(?SERVER) of
-		{ok, State} ->
-			{ok, waiting, State};
-		noconfig ->
-			{stop, config_error}
-	end.
+    case gen_server:call({global, erb_config_server}, {getConfig, bot}) of
+        {ok, {Nick, Chans}} ->
+            {ok, waiting, #state{nick=Nick, chans=Chans}};
+        noconfig ->
+            error_logger:error_msg("[erb_processor] Unable to get configuration~n"),
+            {stop, config_error}
+    end.
 %% -------------------------------------------------------------------
 %% @spec 
 %% state_name(Event, State) -> {next_state, NextStateName, NextState}|

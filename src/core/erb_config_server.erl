@@ -8,8 +8,11 @@
 -behaviour(gen_server).
 -include("erb.hrl").
 
-%% API
--export([get_config/1, start_link/0]).
+%% Include Files
+-include_lib("stdlib/include/qlc.hrl").
+
+%% Exported functions
+-export([start_link/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -18,8 +21,9 @@
 %% Server macro
 -define(SERVER, ?MODULE).
 
-%% State record
+%% Records
 -record(state, {}).
+-record(config, {service, config}).
 
 %% ===================================================================
 %% API
@@ -29,32 +33,8 @@
 %% @doc Starts the server
 %% -------------------------------------------------------------------
 start_link() ->
-    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+    gen_server:start_link({global, ?SERVER}, ?MODULE, [], []).
 
-%% -------------------------------------------------------------------
-%% @spec get_config() -> {ok, Config} | noconfig
-%% @doc Returns a processes' initial state
-%% -------------------------------------------------------------------
-get_config(erb_handler_supervisor) ->
-	% [handlers]
-	{ok, [erb_handler_debug, erb_handler_nickserv, erb_handler_crash]};
-get_config(erb_module_supervisor) ->
-	% [modules]
-	{ok, []};
-get_config(erb_connector) ->
-	% state{server, port}
-	{ok, {state, "irc.freenode.net", 6667}};
-get_config(erb_processor) ->
-	% state{nick, chans}
-	{ok, {state, "Erb__GitHub", ["#geekup"]}};
-get_config(erb_dispatcher) ->
-	% state{}
-	{ok, {state}};
-get_config(erb_handler_nickserv) ->
-	% state{nick, user, pass}
-	{ok, {state, "WantNick", "NickServUser", "NickServPass"}};
-get_config(_) ->
-	noconfig.
 
 %% ===================================================================
 %% gen_server callbacks
@@ -67,6 +47,8 @@ get_config(_) ->
 %% @doc Initiates the server
 %% -------------------------------------------------------------------
 init([]) ->
+    mnesia:create_schema([node()]),
+    mnesia:create_table(config, [{type, set}, {disc_copies, [node()]}, {attributes, record_info(fields, config)}]),
     {ok, #state{}}.
 
 %% -------------------------------------------------------------------
@@ -78,6 +60,23 @@ init([]) ->
 %%                                      {stop, Reason, State}
 %% @doc Handling call messages
 %% -------------------------------------------------------------------
+handle_call({getConfig, Service}, _From, State) ->
+    error_logger:info_msg("Retrieving configuration: ~p", [Service]),
+    Q = qlc:q([
+        C#config.config || C <- mnesia:table(config),
+            C#config.service =:= Service
+    ]),
+    {atomic, Result} = mnesia:transaction(fun() -> qlc:e(Q) end),
+    Reply = case Result of
+        [Config] ->
+            error_logger:info_msg("Got configuration: ~p = ~p~n", [Service, Config]),
+            {ok, Config};
+        [] ->
+            error_logger:warning_msg("No configuration found: ~p~n", [Service]),
+            noconfig
+    end,
+    {reply, Reply, State};
+
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
@@ -88,6 +87,13 @@ handle_call(_Request, _From, State) ->
 %%                                      {stop, Reason, State}
 %% @doc Handling cast messages
 %% -------------------------------------------------------------------
+handle_cast({putConfig, Service, Config}, State) ->
+    error_logger:info_msg("Setting configuration: ~p = ~p~n", [Service, Config]),
+    {atomic, ok} = mnesia:transaction(fun() ->
+        mnesia:write(config, #config{service=Service, config=Config}, write)
+    end),
+    {noreply, State};
+
 handle_cast(_Msg, State) ->
     {noreply, State}.
 

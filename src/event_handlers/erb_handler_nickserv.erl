@@ -47,12 +47,13 @@ add_handler() ->
 %% this function is called to initialize the event handler.
 %% -------------------------------------------------------------------
 init([]) ->
-	case erb_config_server:get_config(?SERVER) of
-		{ok, State} ->
-			{ok, State};
-		noconfig ->
-			{error, config_error}
-	end.
+    case gen_server:call({global, erb_config_server}, {getConfig, nickserv}) of
+        {ok, {Nick, User, Pass}} ->
+            {ok, #state{nick=Nick, user=User, pass=Pass}};
+        noconfig ->
+            %% @todo print error and uninstall self.
+            {error, config_error}
+    end.
 
 %% -------------------------------------------------------------------
 %% @spec  

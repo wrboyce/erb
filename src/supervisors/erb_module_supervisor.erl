@@ -39,15 +39,15 @@ start_link() ->
 %% specifications.
 %% -------------------------------------------------------------------
 init([]) ->
-	case erb_config_server:get_config(?SERVER) of
-		{ok, Modules} ->
-			ChildSpecs = lists:map(fun(M) ->
-				{M, {M, start_link, []}, permanent, 2000, worker, [M]}
-			end, Modules),
-			{ok, {{one_for_one, 5, 60}, ChildSpecs}};
-		noconfig ->
-			{error, config_error}
-	end.
+    case gen_server:call({global, erb_config_server}, {getConfig, modules}) of
+        {ok, Modules} ->
+            ChildSpecs = lists:map(fun(M) ->
+                {M, {M, start_link, []}, permanent, 2000, worker, [M]}
+            end, Modules),
+            {ok, {{one_for_one, 5, 60}, ChildSpecs}};
+        noconfig ->
+            {ok, {{one_for_one, 5, 60}, []}}
+    end.
 
 %% ===================================================================
 %% Internal functions

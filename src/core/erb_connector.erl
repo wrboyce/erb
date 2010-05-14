@@ -52,18 +52,20 @@ send_line(Line) ->
 %% @doc Initiates the server
 %% -------------------------------------------------------------------
 init([]) ->
-	case erb_config_server:get_config(?SERVER) of
-		{ok, {state, Server, Port}} ->
-			case gen_tcp:connect(Server, Port, [{packet, line}, {active, true}]) of
-				{ok, Sock} ->
-					erb_processor:register(),
-					{ok, #state{server=Server, port=Port, sock=Sock}};
-				_ ->
-					{stop, socket_error}
-			end;
-		_ ->
-			{stop, config_error}
-	end.
+    case gen_server:call({global, erb_config_server}, {getConfig, server}) of
+        {ok, {Server, Port}} ->
+            error_logger:info_msg("Connecting to ~s:~B...~n", [Server, Port]),
+            case gen_tcp:connect(Server, Port, [{packet, line}, {active, true}]) of
+                {ok, Sock} ->
+                    error_logger:info_msg("~s:~B connected.~n", [Server, Port]),
+                    gen_fsm:send_event({global, erb_processor}, connected),
+                    {ok, #state{server=Server, port=Port, sock=Sock}};
+                _ ->
+                    {stop, socket_error}
+            end;
+        _ ->
+            {stop, config_error}
+    end.
 
 %% -------------------------------------------------------------------
 %% @spec handle_call(Request, From, State) -> {reply, Reply, State} |
@@ -75,7 +77,7 @@ init([]) ->
 %% @doc Handling call messages
 %% -------------------------------------------------------------------
 handle_call(_Request, _From, State) ->
-	{ok, State}.
+    {ok, State}.
 
 %% -------------------------------------------------------------------
 %% @spec handle_cast(Msg, State) -> {noreply, State} |
