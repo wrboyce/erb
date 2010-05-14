@@ -13,7 +13,7 @@
 -export([start_link/0, register/0, process/1]).
 
 %% gen_fsm callbacks
--export([init/1, waiting/2, registering/2, ready/2, state_name/2, state_name/3, handle_event/3,
+-export([init/1, waiting/2, registering/2, ready/2, handle_event/3,
 	 handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 
 %% Server macro
@@ -32,7 +32,7 @@
 %% does not return until Module:init/1 has returned.  
 %% -------------------------------------------------------------------
 start_link() ->
-    gen_fsm:start_link({local, ?SERVER}, ?MODULE, [], []).
+    gen_fsm:start_link({global, ?SERVER}, ?MODULE, [], []).
 
 %% -------------------------------------------------------------------
 %% @spec register() -> ok.
@@ -81,45 +81,39 @@ init([]) ->
 %% the current state name StateName is called to handle the event. It is also 
 %% called if a timeout occurs. 
 %% -------------------------------------------------------------------
-state_name(_Event, State) ->
-    {next_state, state_name, State}.
-
 waiting(connected, State) ->
-	erb_dispatcher:register(State#state.nick),
-	{next_state, registering, State}.
+    ok = gen_server:cast({global, erb_dispatcher}, {register, State#state.nick}),
+    {next_state, registering, State}.
 
 registering({recv, Line}, State) ->
-	Data = parse_line(Line),
-	case Data#data.operation of
-		ping ->
-			erb_dispatcher:pong(Data#data.body),
-			{next_state, registering, State};
-		err_nicknameinuse ->
-			erb_dispatcher:nick(State#state.nick ++ "_"),
-			{next_state, registering, State#state{nick = State#state.nick ++ "_"}};
-		rpl_welcome ->
-			gen_fsm:send_event(?SERVER, {registered, Data}),
-			{next_state, registering, State};
-		_ ->
-			{next_state, registering, State}
-	end;
-registering({registered, Data}, State) ->
-	erb_dispatcher:join(State#state.chans),
-	erb_router:notify(Data),
-	{next_state, ready, State}.
-	
+    Data = parse_line(Line),
+    case Data#data.operation of
+        ping ->
+            ok = gen_server:cast({global, erb_dispatcher}, {pong, Data#data.body}),
+            {next_state, registering, State};
+        err_nicknameinuse ->
+            ok = gen_server:cast({global, erb_dispatcher}, {nick, State#state.nick ++ "_"}),
+            {next_state, registering, State#state{nick = State#state.nick ++ "_"}};
+        rpl_welcome ->
+            ok = gen_server:cast({global, erb_dispatcher}, {join, State#state.chans}),
+            ok = gen_event:notify({global, erb_router}, Data),
+            {next_state, ready, State};
+        _ ->
+            {next_state, registering, State}
+    end.
+
 ready({recv, Line}, State) ->
 	Data = parse_line(Line),
 	case Data#data.operation of
 		ping ->
-			erb_dispatcher:pong(Data#data.body),
+                        ok = gen_server:cast({global, erb_dispatcher}, {pong, Data#data.body}),
 			Result = {next_state, ready, State};
 		nickchanged ->
 			Result = {next_state, ready, State#state{nick = Data#data.body}};
 		_ ->
 			Result = {next_state, ready, State}
 	end,
-	erb_router:notify(Data),
+        gen_event:notify({global, erb_router}, Data),
 	Result.
 	
 %% -------------------------------------------------------------------
@@ -137,9 +131,6 @@ ready({recv, Line}, State) ->
 %% gen_fsm:sync_send_event/2,3, the instance of this function with the same
 %% name as the current state name StateName is called to handle the event.
 %% -------------------------------------------------------------------
-state_name(_Event, _From, State) ->
-    Reply = ok,
-    {reply, Reply, state_name, State}.
 
 %% -------------------------------------------------------------------
 %% @spec 

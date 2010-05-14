@@ -8,7 +8,7 @@
 -include("erb.hrl").
 
 %% API
--export([start_link/0, send_line/1]).
+-export([start_link/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, 
@@ -29,16 +29,7 @@
 %% @doc Starts the server
 %% -------------------------------------------------------------------
 start_link() ->
-	gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
-
-%% -------------------------------------------------------------------
-%% @spec send_line() -> ok
-%% @doc Send a line down the socket
-%% -------------------------------------------------------------------
-send_line(Line) ->
-	%io:format("~s~n", [Line]),
-	gen_server:cast(?SERVER, {sendline, Line}),
-	ok.
+    gen_server:start_link({global, ?SERVER}, ?MODULE, [], []).
 
 
 %% ===================================================================
@@ -137,5 +128,5 @@ code_change(_OldVsn, State, _Extra) ->
 dispatch([]) ->
 	ok;
 dispatch([Line|Lines]) ->
-	erb_processor:process(Line),
-	dispatch(Lines).
+    gen_fsm:send_event({global, erb_processor}, {recv, Line}),
+    dispatch(Lines).

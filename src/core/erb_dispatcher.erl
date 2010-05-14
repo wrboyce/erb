@@ -9,7 +9,7 @@
 -include("erb.hrl").
 
 %% API
--export([register/1, start_link/0, privmsg/2, join/1]).
+-export([start_link/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -29,33 +29,7 @@
 %% @doc Starts the server
 %% -------------------------------------------------------------------
 start_link() ->
-	gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
-
-%% -------------------------------------------------------------------
-%% @spec register(Nick) -> ok.
-%% @doc Perform initial registration with server
-%% -------------------------------------------------------------------
-register(Nick) ->
-	gen_server:cast(?SERVER, {register, [Nick]}),
-	gen_server:cast(?SERVER, {register, [Nick, "localhost", "localhost", "Erb <http://code.google.com/p/erb>"]}).
-	
-%% -------------------------------------------------------------------
-%% @spec privmsg(Dest, Msg) -> ok.
-%% @doc Send Msg to Dest(ination) via PRIVMSG command
-%% -------------------------------------------------------------------
-privmsg(Dest, Msg) ->
-	gen_server:cast(?SERVER, {privmsg, [Dest, Msg]}).
-
-%% -------------------------------------------------------------------
-%% @spec join(Chans) -> ok.
-%% @doc Join channels
-%% -------------------------------------------------------------------
-join([]) ->
-	ok;
-join([Chan | Chans]) ->
-	gen_server:cast(?SERVER, {join, [Chan]}),
-	join(Chans).
-
+	gen_server:start_link({global, ?SERVER}, ?MODULE, [], []).
 
 %% ===================================================================
 %% gen_server callbacks
@@ -89,19 +63,24 @@ handle_call(_Request, _From, State) ->
 %%                                      {stop, Reason, State}
 %% @doc Handling cast messages
 %% -------------------------------------------------------------------
-handle_cast({register, [Nick]}, State) ->
-	erb_connector:send_line(irc_lib:register(Nick)),
-	{noreply, State};
-handle_cast({register, [User, Host, Server, RealName]}, State) ->
-	erb_connector:send_line(irc_lib:register(User, Host, Server, RealName)),
-	{noreply, State};
-handle_cast({privmsg, [Dest, Mask]}, State) ->
-	erb_connector:send_line(irc_lib:privmsg(Dest, Mask)),
-	{noreply, State};
-handle_cast({join, Chan}, State) ->
-	erb_connector:send_line(irc_lib:join(Chan)),
-	{noreply, State};
-handle_cast(_Msg, State) ->
+handle_cast({pong, Server}, State) ->
+    ok = gen_server:cast({global, erb_connector}, {sendline, irc_lib:pong(Server)}),
+    {noreply, State};
+
+handle_cast({register, Nick}, State) ->
+    ok = gen_server:cast({global, erb_connector}, {sendline, irc_lib:register(Nick)}),
+    ok = gen_server:cast({global, erb_connector}, {sendline, irc_lib:register(Nick, "localhost", "localhost", "Erb [http://github.com/wrboyce/erb]")}),
+    {noreply, State};
+
+handle_cast({privmsg, Dest, Message}, State) ->
+    gen_server:cast({global, erb_connector}, {sendline, irc_lib:privmsg(Dest, Message)}),
+    {noreply, State};
+
+handle_cast({join, Chans}, State) ->
+    ok = gen_server:cast({global, erb_connector}, {sendline, irc_lib:join(Chans)}),
+    {noreply, State};
+
+handle_cast(Msg, State) ->
     {noreply, State}.
 
 %% -------------------------------------------------------------------
