@@ -245,8 +245,14 @@ parse_line([$: | Line]) ->
 %% -------------------------------------------------------------------
 %% @private
 %% @spec parse_line([$: | Line) -> #data
-%% @doc Lines not starting with a colon are wrong
-%% @todo PING/PONG
+%% @doc Lines not starting with a colon are wrong, PING being the exception
 %% -------------------------------------------------------------------
-parse_line(_) ->
-	#data{operation=malformed_line}.
+parse_line([$P, $I, $N, $G, $\s, $:|Server]) ->
+    #data{
+        operation=ping,
+        body=Server
+    };
+
+parse_line(Data) ->
+    error_logger:warning_msg("Malformed Data from Server: ~p~n", [Data]),
+    #data{operation=malformed, body=Data}.
