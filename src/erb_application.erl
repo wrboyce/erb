@@ -15,8 +15,8 @@
 %% ===================================================================
 %% -------------------------------------------------------------------
 %% @spec start(Type, StartArgs) -> {ok, Pid} |
-%%                                     {ok, Pid, State} |
-%%                                     {error, Reason}
+%%                          {ok, Pid, State} |
+%%                          {error, Reason}
 %% @doc This function is called whenever an application
 %% is started using application:start/1,2, and should start the processes
 %% of the application. If the application is structured according to the
@@ -24,12 +24,12 @@
 %% top supervisor of the tree.
 %% -------------------------------------------------------------------
 start(_Type, _StartArgs) ->
-  case erb_supervisor:start_link() of
-    {ok, Pid} -> 
-      {ok, Pid};
-    Error ->
-      Error
-  end.
+    case erb_supervisor:start_link() of
+        {ok, Pid} ->
+            {ok, Pid};
+        Error ->
+            Error
+    end.
 
 %% -------------------------------------------------------------------
 %% @spec stop(State) -> void()
@@ -38,7 +38,7 @@ start(_Type, _StartArgs) ->
 %% should do any necessary cleaning up. The return value is ignored.
 %% -------------------------------------------------------------------
 stop(_State) ->
-  exit(whereis(erb_supervisor), shutdown).
+    exit(whereis(erb_supervisor), shutdown).
 
 %% ===================================================================
 %% Internal functions

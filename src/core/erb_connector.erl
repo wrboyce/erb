@@ -11,8 +11,7 @@
 -export([start_link/0]).
 
 %% gen_server callbacks
--export([init/1, handle_call/3, handle_cast/2, handle_info/2, 
-			terminate/2, code_change/3]).
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 %% Server macro
 -define(SERVER, ?MODULE).
@@ -77,10 +76,10 @@ handle_call(_Request, _From, State) ->
 %% @doc Handling cast messages
 %% -------------------------------------------------------------------
 handle_cast({sendline, Data}, State) ->
-	gen_tcp:send(State#state.sock, Data ++ "\r\n"),
-	{noreply, State};
+    gen_tcp:send(State#state.sock, Data ++ "\r\n"),
+    {noreply, State};
 handle_cast(_Request, State) ->
-	{noreply, State}.
+    {noreply, State}.
 
 %% -------------------------------------------------------------------
 %% @spec handle_info(Info, State) -> {noreply, State} |
@@ -90,14 +89,14 @@ handle_cast(_Request, State) ->
 %% -------------------------------------------------------------------
 handle_info({tcp, Sock, Data}, State) ->
 	%io:format("~s~n", [Data]),
-	Lines = string:tokens(Data, "\r\n"),
-	dispatch(Lines),
-	{noreply, State#state{sock=Sock}};
+    Lines = string:tokens(Data, "\r\n"),
+    dispatch(Lines),
+    {noreply, State#state{sock=Sock}};
 handle_info({tcp_closed, _Sock}, State) ->
-	% init([]), (?)
-	{noreply, State};
+    % init([]), (?)
+    {noreply, State};
 handle_info(_Reqest, State) ->
-	{noreply, State}.
+    {noreply, State}.
 
 %% -------------------------------------------------------------------
 %% @spec terminate(Reason, State) -> ok
@@ -107,14 +106,14 @@ handle_info(_Reqest, State) ->
 %% The return value is ignored.
 %% -------------------------------------------------------------------
 terminate(_Reason, _State) ->
-	ok.
+    ok.
 
 %% -------------------------------------------------------------------
 %% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
 %% @doc Convert process state when code is changed
 %% -------------------------------------------------------------------
 code_change(_OldVsn, State, _Extra) ->
-	{ok, State}.
+    {ok, State}.
 
 
 %% ===================================================================
@@ -126,7 +125,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% @doc Dispatch lines to the router
 %% -------------------------------------------------------------------
 dispatch([]) ->
-	ok;
+    ok;
 dispatch([Line|Lines]) ->
     gen_fsm:send_event({global, erb_processor}, {recv, Line}),
     dispatch(Lines).

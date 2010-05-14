@@ -16,14 +16,14 @@
 %% @spec Creates an event manager.
 %% -------------------------------------------------------------------
 start_link() ->
-  gen_event:start_link({global, ?SERVER}).
+    gen_event:start_link({global, ?SERVER}).
 
 %% -------------------------------------------------------------------
 %% @spec add_handler(Module) -> ok | {'EXIT',Reason} | term()
 %% @spec Adds an event handler
 %% -------------------------------------------------------------------
 add_handler(Module) ->
-  gen_event:add_handler(?SERVER, Module, []).
+    gen_event:add_handler(?SERVER, Module, []).
 
 %% ===================================================================
 %% Internal functions

@@ -52,7 +52,7 @@ operation_to_atom("210") ->
 	rpl_tracereconnect;
 operation_to_atom("211") ->
 	rpl_tracestatslinkinfo;
-%% @todo lots more useless numerics I need to add here.	
+%% @todo lots more useless numerics I need to add here.
 operation_to_atom("433") ->
 	err_nicknameinuse;
 
@@ -61,7 +61,7 @@ operation_to_atom("PRIVMSG") ->
 
 operation_to_atom(Other) ->
 	Other.
-	
+
 %% -------------------------------------------------------------------
 %% @spec pong() -> string
 %% @doc Reply to a server PING
@@ -95,7 +95,7 @@ join(Result, [Channel|Channels]) ->
 %% -------------------------------------------------------------------
 privmsg(Dest, Msg) ->
 	"PRIVMSG " ++ Dest ++ " :" ++ Msg.
-	
+
 %% -------------------------------------------------------------------
 %% @spec kick(Chan, Nick | Chan, Nick, Reason) -> string
 %% @doc Send Msg to Dest(ination) via PRIVMSG
@@ -118,7 +118,7 @@ mode(Dest, Mode) ->
 %% -------------------------------------------------------------------
 shun(Chan, Mask) ->
 	mode(Chan, "+q " ++ Mask).
-	
+
 %% -------------------------------------------------------------------
 %% @spec ban(Chan, Mask) -> string
 %% @doc Ban mask from joining Chan

@@ -12,7 +12,7 @@
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-	 terminate/2, code_change/3]).
+     terminate/2, code_change/3]).
 
 %% Server macro
 -define(SERVER, ?MODULE).
@@ -28,8 +28,8 @@
 %% @doc Starts the server
 %% -------------------------------------------------------------------
 start_link(Handler) ->
-	gen_server:start_link(?MODULE, Handler, []).
-	
+    gen_server:start_link(?MODULE, Handler, []).
+
 %% ===================================================================
 %% gen_server callbacks
 %% ===================================================================
@@ -42,7 +42,7 @@ start_link(Handler) ->
 %% -------------------------------------------------------------------
 init(Handler) ->
 	io:format("Attaching handler ~p to erb_router~n", [Handler]),
-	ok = gen_event:add_sup_handler(erb_router, Handler, []),
+    ok = gen_event:add_sup_handler({global, erb_router}, Handler, []),
     {ok, #state{handler=Handler}}.
 
 %% -------------------------------------------------------------------
@@ -80,7 +80,7 @@ handle_info({gen_event_EXIT, Handler, Reason}, State) ->
               [?MODULE, Handler, Reason]),
     {stop, {handler_died, Handler, Reason}, State};
 handle_info(_Info, State) ->
-	{noreply, State}.
+    {noreply, State}.
 
 %% -------------------------------------------------------------------
 %% @spec terminate(Reason, State) -> void()
