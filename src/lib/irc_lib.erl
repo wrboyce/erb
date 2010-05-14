@@ -83,12 +83,12 @@ register(User, Host, Server, RealName) ->
 %% @doc Join the channel(s)
 %% -------------------------------------------------------------------
 join(Channels) ->
-	join("", Channels).
+    join([], Channels).
 join(Result, []) ->
-	Result;
-join(Result, [Channel | Channels]) ->
-	join(Result ++ "\r\nJOIN " ++ Channel, Channels).
-	
+    string:join(Result, "\r\n");
+join(Result, [Channel|Channels]) ->
+    join(lists:append(Result, ["JOIN " ++ Channel]), Channels).
+
 %% -------------------------------------------------------------------
 %% @spec privmsg(Dest, Msg) -> string
 %% @doc Send Msg to Dest(ination) via PRIVMSG
