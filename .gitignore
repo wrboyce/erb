@@ -1,0 +1,9 @@
+# compiled erlang
+*.beam
+# crash dumps
+*.dump
+# release/boot files
+*.boot
+*.script
+# Mnesia storage
+Mnesia.*@*/
