@@ -6,7 +6,7 @@
 
 {application, erb,
 	[{description, "Erb IRC Bot."},
-	{vsn, "SVN"},
+	{vsn, "dev"},
 	{modules, [
 		erb_application,
 		erb_supervisor,
