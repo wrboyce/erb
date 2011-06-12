@@ -7,8 +7,9 @@
 
 %% @doc Data record representing a line from the server
 -record(data, {
-	origin,
-	operation,
-	destination,
-	options,
-	body}).
+        datetime,
+        origin,
+        operation,
+        destination,
+        options,
+        body}).

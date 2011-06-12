@@ -86,8 +86,8 @@ waiting(connected, State) ->
     error_logger:info_msg("erb_processor switching state: waiting->registering~n"),
     {next_state, registering, State}.
 
-registering({recv, Line}, State) ->
-    Data = parse_line(Line),
+registering({recv, {DateTime, Line}}, State) ->
+    Data = parse_line(DateTime, Line),
     case Data#data.operation of
         ping ->
             ok = gen_server:cast({global, erb_dispatcher}, {pong, Data#data.body}),
@@ -104,8 +104,8 @@ registering({recv, Line}, State) ->
             {next_state, registering, State}
     end.
 
-ready({recv, Line}, State) ->
-    Data = parse_line(Line),
+ready({recv, {DateTime, Line}}, State) ->
+    Data = parse_line(DateTime, Line),
     case Data#data.operation of
         ping ->
             ok = gen_server:cast({global, erb_dispatcher}, {pong, Data#data.body}),
@@ -206,7 +206,7 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %% @spec parse_line([$: | Line) -> #data
 %% @doc Parse RAW data into a #data record.
 %% -------------------------------------------------------------------
-parse_line([$: | Line]) ->
+parse_line(DateTime, [$: | Line]) ->
     BodyPos = string:chr(Line, $:),
     case BodyPos > 0 of
     true ->
@@ -217,17 +217,20 @@ parse_line([$: | Line]) ->
         case length(HeaderBits) of
         1 ->
             #data{
+                datetime = DateTime,
                 origin = lists:nth(1, HeaderBits),
                 body = Body
             };
         2 ->
             #data{
+                datetime = DateTime,
                 origin = lists:nth(1, HeaderBits),
                 operation = irc_lib:operation_to_atom(lists:nth(2, HeaderBits)),
                 body = Body
             };
         _ ->
             #data{
+                datetime = DateTime,
                 origin = lists:nth(1, HeaderBits),
                 operation = irc_lib:operation_to_atom(lists:nth(2, HeaderBits)),
                 destination = lists:nth(3, HeaderBits),
@@ -238,6 +241,7 @@ parse_line([$: | Line]) ->
     false ->
         [Origin, Operation, Destination | _] = string:tokens(Line, " "),
         #data{
+            datetime = DateTime,
             origin = Origin,
             operation = irc_lib:operation_to_atom(Operation),
             destination = Destination,
@@ -249,12 +253,13 @@ parse_line([$: | Line]) ->
 %% @spec parse_line([$: | Line) -> #data
 %% @doc Lines not starting with a colon are wrong, PING being the exception
 %% -------------------------------------------------------------------
-parse_line([$P, $I, $N, $G, $\s, $:|Server]) ->
-    #data{
+parse_line(DateTime, [$P, $I, $N, $G, $\s, $:|Server]) ->
+#data{
+    datetime = DateTime,
         operation=ping,
         body=Server
     };
 
-parse_line(Data) ->
-    error_logger:warning_msg("Malformed Data from Server: ~p~n", [Data]),
+parse_line(DateTime, Data) ->
+    error_logger:warning_msg("Malformed Data from Server: ~p ~p~n", [DateTime, Data]),
     #data{operation=malformed, body=Data}.

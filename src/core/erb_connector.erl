@@ -128,5 +128,5 @@ dispatch([]) ->
     ok;
 dispatch([Line|Lines]) ->
     % error_logger:info_msg("RX: ~p~n", [Line]),
-    gen_fsm:send_event({global, erb_processor}, {recv, Line}),
+    gen_fsm:send_event({global, erb_processor}, {recv, {calendar:universal_time(), Line}}),
     dispatch(Lines).
