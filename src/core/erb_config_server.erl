@@ -46,6 +46,7 @@ start_link() ->
 %% @doc Initiates the server
 %% -------------------------------------------------------------------
 init([]) ->
+    application:start(mnesia),
     mnesia:create_schema([node()]),
     mnesia:create_table(config, [{type, set}, {disc_copies, [node()]}, {attributes, record_info(fields, config)}]),
     {ok, #state{}}.
