@@ -75,6 +75,10 @@ handle_cast({register, Nick}, State) ->
     ok = gen_server:cast({global, erb_connector}, {sendline, irc_lib:register(Nick, "localhost", "localhost", "Erb [http://github.com/wrboyce/erb]")}),
     {noreply, State};
 
+handle_cast({nick, Nick}, State) ->
+    gen_server:cast({global, erb_connector}, {sendline, irc_lib:register(Nick)}),
+    {noreply, State};
+
 handle_cast({privmsg, Dest, Message}, State) ->
     gen_server:cast({global, erb_connector}, {sendline, irc_lib:privmsg(Dest, Message)}),
     {noreply, State};
