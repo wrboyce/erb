@@ -63,13 +63,13 @@ handle_event(Data = #data{}, State) ->
     case string:str(Data#data.origin, "!") > 0 of
         true ->
             [Nick|_] = string:tokens(Data#data.origin, "!"),
-            Key = {Nick, Data#data.destination},
+            Key = {string:to_lower(Nick), Data#data.destination},
             ets:insert(State#state.db, {Key, Data}),
             case Data#data.operation of
                 privmsg ->
                     case string:tokens(Data#data.body, " ") of
                         [".seen", SeenNick] ->
-                            SeenKey = {SeenNick, Data#data.destination},
+                            SeenKey = {string:to_lower(SeenNick), Data#data.destination},
                             Response = io_lib:format("~s: ", [Nick]) ++
                                 case ets:lookup(State#state.db, SeenKey) of
                                     [{SeenKey, SeenData}] ->
