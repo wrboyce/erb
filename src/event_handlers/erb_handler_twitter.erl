@@ -60,17 +60,16 @@ handle_event(Data = #data{}, State) ->
                 case string:to_lower(string:sub_string(Word, 1, 4)) of
                     "http" ->
                         UrlTokens = string:tokens(Word, "/#!"),
-                        case UrlTokens of
-                            [_,[$t,$w,$i,$t,$t,$e,$r,$.,$c,$o,$m]|_] ->
+                        [_,Domain|_] = UrlTokens,
+                        case string:to_lower(Domain) of
+                            "twitter.com" ->
                                 [TwitterUrl,TwitterUser] = case UrlTokens of
                                     [_,_,User] ->
                                         BaseUrl = "http://api.twitter.com/1/users/show.xml?screen_name=~s",
                                         [lists:flatten(io_lib:format(BaseUrl, [User])), User];
                                     [_,_,User,_,TweetId] ->
                                         BaseUrl = "http://api.twitter.com/1/statuses/show.xml?id=~s",
-                                        [lists:flatten(io_lib:format(BaseUrl, [TweetId])), User];
-                                    _ ->
-                                        [error,error]
+                                        [lists:flatten(io_lib:format(BaseUrl, [TweetId])), User]
                                 end,
                                 {ok, RequestId} = httpc:request(get, {TwitterUrl,[]}, [], [{sync, false}]),
                                 error_logger:info_msg("Storing RequestId: ~p (~p)~n", [RequestId, {TwitterUrl, Data#data.destination}]),
