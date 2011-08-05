@@ -83,6 +83,10 @@ handle_cast({privmsg, Dest, Message}, State) ->
     gen_server:cast({global, erb_connector}, {sendline, irc_lib:privmsg(Dest, Message)}),
     {noreply, State};
 
+handle_cast({kick, Dest, Nick, Reason}, State) ->
+    gen_server:cast({global, erb_connector}, {sendline, irc_lib:kick(Dest, Nick, Reason)}),
+    {noreply, State};
+
 handle_cast({join, Chans}, State) ->
     error_logger:info_msg("Joining chans: ~s~n", [string:join(Chans, ", ")]),
     ok = gen_server:cast({global, erb_connector}, {sendline, irc_lib:join(Chans)}),

@@ -58,16 +58,23 @@ init([]) ->
 handle_event(Data, State) ->
     NewState = case Data#data.operation of
         privmsg ->
-            case string:equal(Data#data.body, ":roulette") of
+            case string:equal(Data#data.body, ".roulette") of
                 true ->
+                    [Nick|_Rest] = string:tokens(Data#data.origin, "!"),
                     [Head|Tail] = State,
                     case Head of
                         true ->
-                            ok = gen_server:cast({global, erb_dispatcher}, {privmsg, Data#data.destination, "*bang*"}),
+                            ok = gen_server:cast({global, erb_dispatcher}, {kick, Data#data.destination, Nick, "*bang*"}),
                             load_gun();
                         false ->
-                            ok = gen_server:cast({global, erb_dispatcher}, {privmsg, Data#data.destination, "*click*"}),
-                            Tail ++ [Head]
+                            ok = gen_server:cast({global, erb_dispatcher}, {privmsg, Data#data.destination, io_lib:format("~s: *click*", [Nick])}),
+                            % if there is only a bullet in the chamber, reset the gun
+                            case Tail of
+                                [true] ->
+                                    load_gun();
+                                _ ->
+                                    Tail
+                            end
                     end;
                 false ->
                     State
