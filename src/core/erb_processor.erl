@@ -115,7 +115,8 @@ ready({recv, {DateTime, Line}}, State) ->
         _ ->
             Result = {next_state, ready, State}
     end,
-        gen_event:notify({global, erb_router}, Data),
+    % gen_event:notify({global, erb_router}, Data),
+    gen_server:cast({global, erb_router}, {data, Data}),
     Result.
 
 %% -------------------------------------------------------------------
@@ -208,45 +209,54 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %% -------------------------------------------------------------------
 parse_line(DateTime, [$: | Line]) ->
     BodyPos = string:chr(Line, $:),
-    case BodyPos > 0 of
-    true ->
-        Header = string:substr(Line, 1, BodyPos - 1),
-        Body = string:substr(Line, BodyPos + 1),
-        HeaderBits = string:tokens(Header, " "),
+    Data = case BodyPos > 0 of
+        true ->
+            Header = string:substr(Line, 1, BodyPos - 1),
+            Body = string:substr(Line, BodyPos + 1),
+            HeaderBits = string:tokens(Header, " "),
 
-        case length(HeaderBits) of
-        1 ->
+            case length(HeaderBits) of
+                1 ->
+                    #data{
+                        datetime = DateTime,
+                        origin = lists:nth(1, HeaderBits),
+                        body = Body
+                    };
+                2 ->
+                    #data{
+                        datetime = DateTime,
+                        origin = lists:nth(1, HeaderBits),
+                        operation = irc_lib:operation_to_atom(lists:nth(2, HeaderBits)),
+                        body = Body
+                    };
+                _ ->
+                    #data{
+                        datetime = DateTime,
+                        origin = lists:nth(1, HeaderBits),
+                        operation = irc_lib:operation_to_atom(lists:nth(2, HeaderBits)),
+                        destination = lists:nth(3, HeaderBits),
+                        options = lists:flatten(lists:nthtail(3, HeaderBits)),
+                        body = Body
+                    }
+            end;
+        false ->
+            [Origin, Operation, Destination | _] = string:tokens(Line, " "),
             #data{
                 datetime = DateTime,
-                origin = lists:nth(1, HeaderBits),
-                body = Body
-            };
-        2 ->
-            #data{
-                datetime = DateTime,
-                origin = lists:nth(1, HeaderBits),
-                operation = irc_lib:operation_to_atom(lists:nth(2, HeaderBits)),
-                body = Body
+                origin = Origin,
+                operation = irc_lib:operation_to_atom(Operation),
+                destination = Destination,
+                body = ""
+            }
+    end,
+    case {Data#data.operation, Data#data.body} of
+        {privmsg, ["."|_]} ->
+            Data#data{
+                operation = command,
+                body = string:tokens(Data#data.body, " ")
             };
         _ ->
-            #data{
-                datetime = DateTime,
-                origin = lists:nth(1, HeaderBits),
-                operation = irc_lib:operation_to_atom(lists:nth(2, HeaderBits)),
-                destination = lists:nth(3, HeaderBits),
-                options = lists:flatten(lists:nthtail(3, HeaderBits)),
-                body = Body
-            }
-        end;
-    false ->
-        [Origin, Operation, Destination | _] = string:tokens(Line, " "),
-        #data{
-            datetime = DateTime,
-            origin = Origin,
-            operation = irc_lib:operation_to_atom(Operation),
-            destination = Destination,
-            body = ""
-        }
+            Data
     end;
 %% -------------------------------------------------------------------
 %% @private
