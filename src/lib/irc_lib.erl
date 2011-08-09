@@ -8,7 +8,7 @@
 
 %% API
 -export([operation_to_atom/1, pong/1, register/1, register/4, join/1,
-			privmsg/2, kick/2, kick/3, mode/2, shun/2, ban/2]).
+			privmsg/2, kick/2, kick/3, mode/2, shun/2, ban/2, whois/1]).
 
 %% ===================================================================
 %% API Functions
@@ -52,10 +52,13 @@ operation_to_atom("210") ->
 	rpl_tracereconnect;
 operation_to_atom("211") ->
 	rpl_tracestatslinkinfo;
-%% @todo lots more useless numerics I need to add here.
+operation_to_atom("330") ->
+        rpl_whoisaccount;
 operation_to_atom("433") ->
 	err_nicknameinuse;
 
+operation_to_atom("JOIN") ->
+	join;
 operation_to_atom("PRIVMSG") ->
 	privmsg;
 
@@ -125,3 +128,10 @@ shun(Chan, Mask) ->
 %% -------------------------------------------------------------------
 ban(Chan, Mask) ->
 	mode(Chan, "+b " ++ Mask).
+
+%% -------------------------------------------------------------------
+%% @spec whois(Nick) -> string
+%% @doc Lookup user info from the server
+%% -------------------------------------------------------------------
+whois(Nick) ->
+    "WHOIS " ++ Nick.

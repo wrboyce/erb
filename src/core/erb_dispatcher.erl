@@ -65,7 +65,6 @@ handle_call(_Request, _From, State) ->
 %% @doc Handling cast messages
 %% -------------------------------------------------------------------
 handle_cast({pong, Server}, State) ->
-    error_logger:info_msg("Ping? Pong!~n"),
     ok = gen_server:cast({global, erb_connector}, {sendline, irc_lib:pong(Server)}),
     {noreply, State};
 
@@ -77,6 +76,10 @@ handle_cast({register, Nick}, State) ->
 
 handle_cast({nick, Nick}, State) ->
     gen_server:cast({global, erb_connector}, {sendline, irc_lib:register(Nick)}),
+    {noreply, State};
+
+handle_cast({whois, Nick}, State) ->
+    gen_server:cast({global, erb_connector}, {sendline, irc_lib:whois(Nick)}),
     {noreply, State};
 
 handle_cast({privmsg, Dest, Message}, State) ->

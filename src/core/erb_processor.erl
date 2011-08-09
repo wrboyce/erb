@@ -20,7 +20,7 @@
 -define(SERVER, ?MODULE).
 
 %% State record
--record(state, {nick, chans}).
+-record(state, {nick, chans, nick2account}).
 
 %% ===================================================================
 %% API
@@ -64,7 +64,7 @@ process(Line) ->
 init([]) ->
     case gen_server:call({global, erb_config_server}, {getConfig, bot}) of
         {ok, {Nick, Chans}} ->
-            {ok, waiting, #state{nick=Nick, chans=Chans}};
+            {ok, waiting, #state{nick=Nick, chans=Chans, nick2account=ets:new(processor_nick2account, [])}};
         noconfig ->
             error_logger:error_msg("[erb_processor] Unable to get configuration~n"),
             {stop, config_error}
@@ -106,17 +106,52 @@ registering({recv, {DateTime, Line}}, State) ->
 
 ready({recv, {DateTime, Line}}, State) ->
     Data = parse_line(DateTime, Line),
-    case Data#data.operation of
+    Result = case Data#data.operation of
         ping ->
             ok = gen_server:cast({global, erb_dispatcher}, {pong, Data#data.body}),
-            Result = {next_state, ready, State};
+            {next_state, ready, State};
         nickchanged ->
-            Result = {next_state, ready, State#state{nick = Data#data.body}};
+            {next_state, ready, State#state{nick = Data#data.body}};
+        join ->
+            case string:tokens(Data#data.origin, "!@") of
+                [Nick,_User,_Host] ->
+                    gen_server:cast({global, erb_dispatcher}, {whois, Nick});
+                _ ->
+                    pass
+            end,
+            {next_state, ready, State};
+        rpl_whoisaccount ->
+            [Nick,Account] = Data#data.options,
+            true = ets:insert(State#state.nick2account, {Nick, Account}),
+            {next_state, ready, State};
+        part ->
+            case string:tokens(Data#data.origin, "!@") of
+                [Nick,_User,_Host] ->
+                    true = ets:delete(State#state.nick2account, Nick);
+                _ ->
+                    pass
+            end,
+            {next_state, ready, State};
         _ ->
-            Result = {next_state, ready, State}
+            {next_state, ready, State}
     end,
-    % gen_event:notify({global, erb_router}, Data),
-    gen_server:cast({global, erb_router}, {data, Data}),
+    AugmentedData = case Data#data.origin of
+        undefined ->
+            Data;
+        _ -> case string:tokens(Data#data.origin, "!@") of
+            [N,_,_] ->
+                case ets:lookup(State#state.nick2account, N) of
+                    [{_,A}] ->
+                        Data#data{ account = A };
+                    _ ->
+                        Data
+                end;
+            _ ->
+                Data
+        end
+    end,
+    error_logger:info_msg("~p~n", [AugmentedData]),
+    gen_server:cast({global, erb_router}, {data, AugmentedData}),
     Result.
 
 %% -------------------------------------------------------------------
@@ -235,7 +270,7 @@ parse_line(DateTime, [$: | Line]) ->
                         origin = lists:nth(1, HeaderBits),
                         operation = irc_lib:operation_to_atom(lists:nth(2, HeaderBits)),
                         destination = lists:nth(3, HeaderBits),
-                        options = lists:flatten(lists:nthtail(3, HeaderBits)),
+                        options = lists:nthtail(3, HeaderBits),
                         body = Body
                     }
             end;
