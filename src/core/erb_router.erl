@@ -90,7 +90,7 @@ handle_cast({data, Data}, State) ->
         privmsg ->
             case Data#data.body of
                 "." ->
-                    pong;
+                    gen_server:cast({global, erb_dispatcher}, {privmsg, Data#data.destination, "Pong!"});
                 _ ->
                     % Check if the data is a command and send to any subscribed modules
                     case string:substr(Data#data.body, 1, 1) of
