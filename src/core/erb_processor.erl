@@ -150,7 +150,6 @@ ready({recv, {DateTime, Line}}, State) ->
                 Data
         end
     end,
-    error_logger:info_msg("~p~n", [AugmentedData]),
     gen_server:cast({global, erb_router}, {data, AugmentedData}),
     Result.
 

@@ -58,14 +58,12 @@ handle_call({subscribeToOperation, Operation}, {FromPid,_}, State) when is_atom(
     true = ets:insert(State#state.subscriptions, {Operation, FromPid}),
     {reply, ok, State};
 handle_call({subscribeToCommand, Command}, {FromPid,_}, State) when is_atom(Command) ->
-    error_logger:info_msg("subscribeToCommand ~p from ~p~n", [Command, FromPid]),
     true = ets:insert(State#state.subscriptions, {{cmd, Command}, FromPid}),
     {reply, ok, State};
 handle_call({subscribeToUrls, Domain}, {FromPid,_}, State) ->
     true = ets:insert(State#state.subscriptions, {{url, string:to_lower(Domain)}, FromPid}),
     {reply, ok, State};
 handle_call(subscribeToUnclaimedUrls, {FromPid,_}, State) ->
-    error_logger:info_msg("subscribeToUnclaimedUrls from ~p~n", [FromPid]),
     true = ets:insert(State#state.subscriptions, {{url, catchall}, FromPid}),
     {reply, ok, State};
 handle_call(subscribeToAllUrls, {FromPid,_}, State) ->
@@ -110,7 +108,6 @@ handle_cast({data, Data}, State) ->
                             Urls = lists:filter(fun(Word) ->
                                 case string:to_lower(string:substr(Word, 1, 4)) of
                                     "http" ->
-                                        error_logger:info_msg("We got a match!~n"),
                                         true;
                                     _ ->
                                         false
