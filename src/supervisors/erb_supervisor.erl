@@ -58,14 +58,7 @@ init([]) ->
 							infinity,
 							supervisor,
 							[erb_module_supervisor]},
-	HandlerSupervisor	= {erb_handler_supervisor,
-							{erb_handler_supervisor, start_link, []},
-							permanent,
-							infinity,
-							supervisor,
-							[erb_handler_supervisor]},
-
-    {ok, {{one_for_all, 5, 60}, [ConfigServer, CoreSupervisor, ModuleSupervisor, HandlerSupervisor]}}.
+    {ok, {{one_for_all, 5, 60}, [ConfigServer, CoreSupervisor, ModuleSupervisor]}}.
 
 %% ===================================================================
 %% Internal functions
