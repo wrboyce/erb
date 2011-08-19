@@ -24,7 +24,7 @@
 %% @doc Starts the supervisor
 %% -------------------------------------------------------------------
 start_link() ->
-    supervisor:start_link({local, ?SERVER}, ?MODULE, []).
+    supervisor:start_link({global, ?SERVER}, ?MODULE, []).
 
 %% ===================================================================
 %% Supervisor callbacks
@@ -42,11 +42,12 @@ init([]) ->
     case gen_server:call({global, erb_config_server}, {getConfig, modules}) of
         {ok, Modules} ->
             ChildSpecs = lists:map(fun(M) ->
-                {M, {M, start_link, []}, permanent, 2000, worker, [M]}
-            end, Modules),
+                erb_module_manager:gen_spec(M)
+            end, [erb_module_manager] ++ Modules),
             {ok, {{one_for_one, 5, 60}, ChildSpecs}};
         noconfig ->
-            {ok, {{one_for_one, 5, 60}, []}}
+            ChildSpecs = [erb_module_manager:gen_spec(erb_module_manager)],
+            {ok, {{one_for_one, 5, 60}, ChildSpecs}}
     end.
 
 %% ===================================================================
