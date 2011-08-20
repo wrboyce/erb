@@ -5,7 +5,11 @@
 %% -------------------------------------------------------------------
 -module(erb_router).
 -behaviour(gen_server).
+
+%% Include Files
+-include_lib("stdlib/include/qlc.hrl").
 -include("erb.hrl").
+-compile(export_all).
 
 %% API
 -export([start_link/0]).
@@ -17,7 +21,8 @@
 -define(SERVER, ?MODULE).
 
 %% State record
--record(state, {subscriptions}).
+-record(state, {}).
+-record(subscription, {type, arg, pid}).
 
 %% ===================================================================
 %% API
@@ -42,8 +47,8 @@ start_link() ->
 %% @doc Initiates the server
 %% -------------------------------------------------------------------
 init([]) ->
-    State = #state{ subscriptions = ets:new(subscriptions_ets, [bag]) },
-    {ok, State}.
+    mnesia:create_table(subscription, [{type, bag}, {ram_copies, [node()]}, {attributes, record_info(fields, subscription)}]),
+    {ok, #state{}}.
 
 %% -------------------------------------------------------------------
 %% @spec handle_call(Request, From, State) -> {reply, Reply, State} |
@@ -55,19 +60,19 @@ init([]) ->
 %% @doc Handling call messages
 %% -------------------------------------------------------------------
 handle_call({subscribeToOperation, Operation}, {FromPid,_}, State) when is_atom(Operation) ->
-    true = ets:insert(State#state.subscriptions, {Operation, FromPid}),
+    ok = add_subscription({operation, Operation}, FromPid),
     {reply, ok, State};
 handle_call({subscribeToCommand, Command}, {FromPid,_}, State) when is_atom(Command) ->
-    true = ets:insert(State#state.subscriptions, {{cmd, Command}, FromPid}),
+    ok = add_subscription({command, Command}, FromPid),
     {reply, ok, State};
 handle_call({subscribeToUrls, Domain}, {FromPid,_}, State) ->
-    true = ets:insert(State#state.subscriptions, {{url, string:to_lower(Domain)}, FromPid}),
+    ok = add_subscription({url, Domain}, FromPid),
     {reply, ok, State};
 handle_call(subscribeToUnclaimedUrls, {FromPid,_}, State) ->
-    true = ets:insert(State#state.subscriptions, {{url, catchall}, FromPid}),
+    ok = add_subscription({url, catchall}, FromPid),
     {reply, ok, State};
 handle_call(subscribeToAllUrls, {FromPid,_}, State) ->
-    true = ets:insert(State#state.subscriptions, {{url, all}, FromPid}),
+    ok = add_subscription({url, all}, FromPid),
     {reply, ok, State};
 handle_call(_Request, _From, State) ->
     {noreply, State}.
@@ -80,10 +85,10 @@ handle_call(_Request, _From, State) ->
 %% -------------------------------------------------------------------
 handle_cast({data, Data}, State) ->
     % Send to modules subscribed to the raw irc operation
-    Pids = pids_from_ets(ets:lookup(State#state.subscriptions, Data#data.operation)),
-    lists:map(fun(Pid) ->
-        gen_server:cast(Pid, {event, Data})
-    end, Pids),
+    OperationPids = get_subscribed_pids({operation, Data#data.operation}),
+    lists:map(fun(OperationPid) ->
+        gen_server:cast(OperationPid, {event, Data})
+    end, OperationPids),
     case Data#data.operation of
         privmsg ->
             case Data#data.body of
@@ -98,7 +103,7 @@ handle_cast({data, Data}, State) ->
                             Command = list_to_atom(CommandString),
                             CommandData = Data#data{ operation = Command, body = Args },
                             error_logger:info_msg("[command] operation=~p args=~p~n", [Command, Args]),
-                            CommandPids = pids_from_ets(ets:lookup(State#state.subscriptions, {cmd, CommandData#data.operation})),
+                            CommandPids = get_subscribed_pids({command, CommandData#data.operation}),
                             error_logger:info_msg("subscribers=~p~n", [CommandPids]),
                             lists:map(fun(Pid) ->
                                 gen_server:cast(Pid, {Command, CommandData})
@@ -116,10 +121,10 @@ handle_cast({data, Data}, State) ->
                             lists:map(fun(Url) ->
                                 error_logger:info_msg("Got URL: ~s~n", [Url]),
                                 [_Protocol,Domain|_Path] = string:tokens(Url, "/"),
-                                AllDomainPids = pids_from_ets(ets:lookup(State#state.subscriptions, {url, all})),
-                                DomainPids = case pids_from_ets(ets:lookup(State#state.subscriptions, {url, string:to_lower(Domain)})) of
+                                AllDomainPids = get_subscribed_pids({url, all}),
+                                DomainPids = case get_subscribed_pids({url, string:to_lower(Domain)}) of
                                     [] ->
-                                        pids_from_ets(ets:lookup(State#state.subscriptions, {url, catchall})) ++ AllDomainPids;
+                                        get_subscribed_pids({url, catchall}) ++ AllDomainPids;
                                     Other ->
                                         Other ++ AllDomainPids
                                 end,
@@ -143,6 +148,9 @@ handle_cast(_Request, State) ->
 %%                                       {stop, Reason, State}
 %% @doc Handling all non call/cast messages
 %% -------------------------------------------------------------------
+handle_info({'DOWN', _Ref, process, Pid, _Reason}, State) ->
+    ok = del_subscriptions(Pid),
+    {noreply, State};
 handle_info(_Reqest, State) ->
     {noreply, State}.
 
@@ -167,5 +175,28 @@ code_change(_OldVsn, State, _Extra) ->
 %% ===================================================================
 %% Internal functions
 %% ===================================================================
-pids_from_ets(Results) ->
-    lists:map(fun({_Key,Pid}) -> Pid end, Results).
+add_subscription({Type, Arg}, Pid) ->
+    erlang:monitor(process, Pid),
+    error_logger:info_msg("add_subscription({~p, ~p}, ~p)~n", [Type, Arg, Pid]),
+    {atomic, ok} = mnesia:transaction(fun() ->
+        mnesia:write(#subscription{ type = Type, arg = Arg, pid = Pid })
+    end),
+    ok.
+
+get_subscribed_pids({Type, Arg}) ->
+    Q = qlc:q([S#subscription.pid || S <- mnesia:table(subscription),
+            S#subscription.type =:= Type,
+            S#subscription.arg =:= Arg]),
+    {atomic, Pids} = mnesia:transaction(fun() -> qlc:e(Q) end),
+    Pids.
+
+del_subscriptions(Pid) ->
+    Q = qlc:q([S || S <- mnesia:table(subscription),
+            S#subscription.pid =:= Pid]),
+    {atomic, ok} = mnesia:transaction(fun() ->
+        lists:map(fun(S) ->
+            mnesia:delete_object(S)
+        end, qlc:e(Q)),
+        ok
+    end),
+    ok.
