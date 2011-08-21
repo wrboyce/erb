@@ -26,7 +26,7 @@
 %% @doc Starts the server
 %% -------------------------------------------------------------------
 start_link() ->
-    gen_server:start_link({global, ?SERVER}, ?MODULE, [], []).
+    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 
 %% ===================================================================
