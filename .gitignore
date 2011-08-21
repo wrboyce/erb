@@ -1,5 +1,7 @@
 # compiled erlang
 *.beam
+# "compiled" .app file
+*.app
 # crash dumps
 *.dump
 # release/boot files

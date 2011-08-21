@@ -1,9 +1,0 @@
-{release,
-    {"erb", "dev"},
-    {erts, "5.3"},
-    [{kernel, "2.14.4"},
-     {stdlib, "1.17.4"},
-     {sasl, "2.1.9.4"},
-     {mnesia, "4.4.19"},
-     {erb, "dev"}]
-}.

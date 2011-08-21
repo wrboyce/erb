@@ -1,0 +1,22 @@
+{application, erb, [
+    {description, "Erb IRC Bot"},
+    {vsn, git},
+    {registered, [
+        erb_config_server,
+        erb_connector,
+        erb_processor,
+        erb_dispatcher,
+        erb_router,
+        erb_module_supervisor,
+        erb_module_manager
+    ]},
+    {applications, [
+        kernel,
+        stdlib,
+        sasl,
+        mnesia,
+        inets
+    ]},
+    {mod, {erb_application, []}},
+    {env, []}
+]}.
