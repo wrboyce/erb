@@ -20,7 +20,6 @@
 
 %% Server macro
 -define(SERVER, ?MODULE).
--define(APIKEY, "").
 
 %% State record
 -record(state, {apikey, reqchanmap}).
@@ -48,12 +47,18 @@ start_link() ->
 %% @doc Initiates the server
 %% -------------------------------------------------------------------
 init([]) ->
-    ok = gen_server:call({global, erb_router}, {subscribeToCommand, movie}),
-    application:start(inets),
-    State = #state{
-        reqchanmap=ets:new(moviedb_reqchanmap, [private, ordered_set])
-    },
-    {ok, State}.
+    case gen_server:call({global, erb_config_server}, {getConfig, moviedb_apikey}) of
+        {ok, ApiKey} ->
+            application:start(inets),
+            State = #state{
+                apikey=ApiKey,
+                reqchanmap=ets:new(moviedb_reqchanmap, [private, ordered_set])
+            },
+            ok = gen_server:call({global, erb_router}, {subscribeToCommand, movie}),
+            {ok, State};
+        noconfig ->
+            {stop, noApiKey}
+    end.
 
 %% -------------------------------------------------------------------
 %% @spec handle_call(Request, From, State) -> {reply, Reply, State} |
@@ -75,7 +80,7 @@ handle_call(_Request, _From, State) ->
 %% -------------------------------------------------------------------
 handle_cast({movie, Data}, State) ->
     SearchString = string:join(Data#data.body, ["+"]),
-    Url = io_lib:format("http://api.themoviedb.org/2.1/Movie.search/en/xml/~s/~s", [?APIKEY, SearchString]),
+    Url = io_lib:format("http://api.themoviedb.org/2.1/Movie.search/en/xml/~s/~s", [State#state.apikey, SearchString]),
     {ok, RequestId} = httpc:request(get, {Url, []}, [], [{sync, false}]),
     error_logger:info_msg("[erb_moviedb] Storing RequestId: ~s -> ~p (~p)~n", [Url, RequestId, Data#data.destination]),
     true = ets:insert(State#state.reqchanmap, {RequestId, Data#data.destination}),
