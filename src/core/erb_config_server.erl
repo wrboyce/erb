@@ -82,7 +82,8 @@ init([]) ->
 %% @doc Handling call messages
 %% -------------------------------------------------------------------
 handle_call({addBot, {Nick, Network, Chans}}, _From, State) ->
-    BotConfig = #bot_config{ nick=Nick, network=Network, chans=Chans, enabled=true },
+    BotId = list_to_atom(string:to_lower(Nick)),
+    BotConfig = #bot_config{ id=BotId, nick=Nick, network=Network, chans=Chans, enabled=true },
     error_logger:info_msg("Creating bot ~p~n", [BotConfig]),
     {atomic, ok} = mnesia:transaction(fun() ->
         mnesia:write(BotConfig)
@@ -129,7 +130,7 @@ handle_call({getGlobalConfig, Service}, _From, State) ->
     {reply, Reply, State};
 
 handle_call({getConfig, Bot, Service}, _From, State) ->
-    error_logger:info_msg("Retrieving configuration: ~p", [Service]),
+    error_logger:info_msg("Retrieving configuration: ~p.~p", [Bot, Service]),
     Q = qlc:q([
         C#config.config || C <- mnesia:table(config),
             C#config.service =:= Service,
@@ -170,7 +171,7 @@ handle_cast({putGlobalConfig, Service, Config}, State) ->
     {noreply, State};
 
 handle_cast({putConfig, Bot, Service, Config}, State) ->
-    error_logger:info_msg("Setting configuration: ~p = ~p~n", [Service, Config]),
+    error_logger:info_msg("Setting configuration: ~p.~p = ~p~n", [Bot, Service, Config]),
     {atomic, ok} = mnesia:transaction(fun() ->
         mnesia:write(config, #config{bot=Bot#bot.id, service=Service, config=Config, enabled=true}, write)
     end),
