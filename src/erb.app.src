@@ -1,6 +1,6 @@
 {application, erb, [
     {description, "Erb IRC Bot"},
-    {vsn, git},
+    {vsn, "0.1"},
     {registered, [
         erb_supervisor,
         erb_config_server,
