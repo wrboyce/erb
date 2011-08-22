@@ -10,8 +10,10 @@
         kernel,
         stdlib,
         sasl,
-        mnesia,
         inets
+    ]},
+    {included_applications, [
+        mnesia
     ]},
     {mod, {erb_application, []}},
     {env, []}

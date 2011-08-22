@@ -64,8 +64,8 @@ start_link() ->
 %% @doc Initiates the server
 %% -------------------------------------------------------------------
 init([]) ->
-    application:start(mnesia),
     mnesia:create_schema([node()]),
+    application:start(mnesia),
     mnesia:create_table(bot_config, [{type, set}, {disc_copies, [node()]}, {attributes, record_info(fields, bot_config)}]),
     mnesia:create_table(config, [{type, set}, {disc_copies, [node()]}, {attributes, record_info(fields, config)}]),
     mnesia:create_table(server, [{type, set}, {disc_copies, [node()]}, {attributes, record_info(fields, server)}]),
