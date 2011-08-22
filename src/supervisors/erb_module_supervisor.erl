@@ -38,16 +38,17 @@ start_link(Bot) ->
 %% specifications.
 %% -------------------------------------------------------------------
 init([Bot]) ->
-    case gen_server:call({global, erb_config_server}, {getConfig, Bot, modules}) of
+    ModuleSpecs = case gen_server:call({global, erb_config_server}, {getConfig, Bot, modules}) of
         {ok, Modules} ->
-            ChildSpecs = lists:map(fun(M) ->
-                {M, {M, start_link, [Bot]}, permanent, 2000, worker, [M]}
-            end, [erb_module_manager] ++ Modules),
-            {ok, {{one_for_one, 5, 60}, ChildSpecs}};
+            lists:map(fun(M) ->
+                erb_module_manager:gen_spec(M, Bot)
+            end, Modules);
         noconfig ->
-            ChildSpecs = [{erb_module_manager, {erb_module_manager, start_link, [Bot]}, permanent, 2000, worker, [erb_module_manager]}],
-            {ok, {{one_for_one, 5, 60}, ChildSpecs}}
-    end.
+            []
+    end,
+    ModuleManager = erb_module_manager:gen_spec(erb_module_manager, Bot),
+    ChildSpecs = [ModuleManager|ModuleSpecs],
+    {ok, {{one_for_one, 5, 60}, ChildSpecs}}.
 
 %% ===================================================================
 %% Internal functions
