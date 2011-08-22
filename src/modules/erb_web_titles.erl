@@ -8,7 +8,7 @@
 -include("erb.hrl").
 
 %% API
--export([start_link/0]).
+-export([start_link/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -17,7 +17,7 @@
 -define(SERVER, ?MODULE).
 
 %% State record
--record(state, {reqchanmap}).
+-record(state, {bot, reqchanmap}).
 
 %% ===================================================================
 %% API
@@ -27,8 +27,8 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @doc Starts the server
 %% -------------------------------------------------------------------
-start_link() ->
-    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+start_link(Bot) ->
+    gen_server:start_link({local, ?SERVER}, ?MODULE, [Bot], []).
 
 
 %% ===================================================================
@@ -41,10 +41,12 @@ start_link() ->
 %%                         {stop, Reason}
 %% @doc Initiates the server
 %% -------------------------------------------------------------------
-init([]) ->
-    application:start(inets),
-    ok = gen_server:call({global, erb_router}, subscribeToUnclaimedUrls),
-    State = #state{ reqchanmap=ets:new(web_titler_reqchanmap, [ordered_set]) },
+init([Bot]) ->
+    ok = gen_server:call(Bot#bot.router, subscribeToUnclaimedUrls),
+    State = #state{
+        bot=Bot,
+        reqchanmap=ets:new(web_titler_reqchanmap, [ordered_set])
+    },
     {ok, State}.
 
 %% -------------------------------------------------------------------
@@ -93,7 +95,7 @@ handle_info({http, {RequestId, Response}}, State) ->
                         _ ->
                             {match, [Title]} = re:run(Body, "<title>(.*?)</title>", [caseless,multiline,{capture,[1],list}]),
                             [_Proto, Host|_Path] = string:tokens(Url, "/"),
-                            ok = gen_server:cast({global, erb_dispatcher}, {privmsg, Chan, "[" ++ Host ++ "] " ++ Title}),
+                            ok = gen_server:cast((State#state.bot)#bot.dispatcher, {privmsg, Chan, "[" ++ Host ++ "] " ++ Title}),
                             ok
                     end;
                 _ ->

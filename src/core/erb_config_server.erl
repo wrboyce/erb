@@ -22,7 +22,25 @@
 
 %% Records
 -record(state, {}).
--record(config, {service, config}).
+%% mnesia Records
+%% @doc Bot configuration
+-record(bot_config, {
+        id,
+        network,
+        nick,
+        chans,
+        enabled}).
+%% @doc IRC Server
+-record(server, {
+        network,
+        host,
+        port,
+        enabled}).
+%% @doc generic service config
+-record(config, {
+        service,
+        config,
+        enabled}).
 
 %% ===================================================================
 %% API
@@ -48,7 +66,9 @@ start_link() ->
 init([]) ->
     application:start(mnesia),
     mnesia:create_schema([node()]),
+    mnesia:create_table(bot_config, [{type, set}, {disc_copies, [node()]}, {attributes, record_info(fields, bot_config)}]),
     mnesia:create_table(config, [{type, set}, {disc_copies, [node()]}, {attributes, record_info(fields, config)}]),
+    mnesia:create_table(server, [{type, set}, {disc_copies, [node()]}, {attributes, record_info(fields, server)}]),
     {ok, #state{}}.
 
 %% -------------------------------------------------------------------
@@ -60,11 +80,58 @@ init([]) ->
 %%                                      {stop, Reason, State}
 %% @doc Handling call messages
 %% -------------------------------------------------------------------
-handle_call({getConfig, Service}, _From, State) ->
-    error_logger:info_msg("Retrieving configuration: ~p", [Service]),
+handle_call({addBot, {Nick, Network, Chans}}, _From, State) ->
+    BotId = list_to_atom(string:to_lower(Nick)),
+    BotConfig = #bot_config{ id=BotId, nick=Nick, network=Network, chans=Chans, enabled=true },
+    error_logger:info_msg("Creating bot ~p~n", [BotConfig]),
+    {atomic, ok} = mnesia:transaction(fun() ->
+        mnesia:write(BotConfig)
+    end),
+    Reply = {ok, bot_from_config(BotConfig)},
+    {reply, Reply, State};
+
+handle_call(getBots, _From, State) ->
+    Q = qlc:q([
+        C || C <- mnesia:table(bot_config),
+        C#bot_config.enabled =:= true]),
+        {atomic, BotConfigs} = mnesia:transaction(fun() -> qlc:e(Q) end),
+        Bots = lists:map(fun(C) -> bot_from_config(C) end, BotConfigs),
+        {reply, {ok, Bots}, State};
+
+handle_call({getServers, NetworkId}, _From, State) ->
+    Q = qlc:q([{S#server.host, S#server.port} || S <- mnesia:table(server),
+        S#server.network =:= NetworkId]),
+    {atomic, Result} = mnesia:transaction(fun() -> qlc:e(Q) end),
+    Reply = case Result of
+        [] ->
+            {error, notfound};
+        _ ->
+            {ok, Result}
+    end,
+    {reply, Reply, State};
+
+handle_call({getGlobalConfig, Service}, _From, State) ->
+    error_logger:info_msg("Retrieving global configuration: ~p", [Service]),
     Q = qlc:q([
         C#config.config || C <- mnesia:table(config),
-            C#config.service =:= Service
+            C#config.service =:= {'_global', Service}
+    ]),
+    {atomic, Result} = mnesia:transaction(fun() -> qlc:e(Q) end),
+    Reply = case Result of
+        [Config] ->
+            error_logger:info_msg("Got global configuration: ~p = ~p~n", [Service, Config]),
+            {ok, Config};
+        [] ->
+            error_logger:warning_msg("No global configuration found: ~p~n", [Service]),
+            noconfig
+    end,
+    {reply, Reply, State};
+
+handle_call({getConfig, Bot, Service}, _From, State) ->
+    error_logger:info_msg("Retrieving configuration: ~p.~p", [Bot, Service]),
+    Q = qlc:q([
+        C#config.config || C <- mnesia:table(config),
+            C#config.service =:= {Bot, Service}
     ]),
     {atomic, Result} = mnesia:transaction(fun() -> qlc:e(Q) end),
     Reply = case Result of
@@ -87,10 +154,23 @@ handle_call(_Request, _From, State) ->
 %%                                      {stop, Reason, State}
 %% @doc Handling cast messages
 %% -------------------------------------------------------------------
-handle_cast({putConfig, Service, Config}, State) ->
-    error_logger:info_msg("Setting configuration: ~p = ~p~n", [Service, Config]),
+handle_cast({addServer, Network, {Host, Port}}, State) ->
     {atomic, ok} = mnesia:transaction(fun() ->
-        mnesia:write(config, #config{service=Service, config=Config}, write)
+        mnesia:write(#server{ network=Network, host=Host, port=Port, enabled=true })
+    end),
+    {noreply, State};
+
+handle_cast({putGlobalConfig, Service, Config}, State) ->
+    error_logger:info_msg("Setting global configuration: ~p = ~p~n", [Service, Config]),
+    {atomic, ok} = mnesia:transaction(fun() ->
+                mnesia:write(#config{service={'_global', Service}, config=Config, enabled=true})
+    end),
+    {noreply, State};
+
+handle_cast({putConfig, Bot, Service, Config}, State) ->
+    error_logger:info_msg("Setting configuration: ~p.~p = ~p~n", [Bot, Service, Config]),
+    {atomic, ok} = mnesia:transaction(fun() ->
+        mnesia:write(#config{ service={Bot, Service}, config=Config, enabled=true })
     end),
     {noreply, State};
 
@@ -126,3 +206,10 @@ code_change(_OldVsn, State, _Extra) ->
 %% ===================================================================
 %%  Internal functions
 %% ===================================================================
+bot_from_config(BotConfig) ->
+    #bot{
+        id=BotConfig#bot_config.id,
+        network=BotConfig#bot_config.network,
+        nick=BotConfig#bot_config.nick,
+        chans=BotConfig#bot_config.chans
+    }.

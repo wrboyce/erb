@@ -10,7 +10,7 @@
 -include("erb.hrl").
 
 %% API
--export([start_link/0, register/0, process/1]).
+-export([start_link/2]).
 
 %% gen_fsm callbacks
 -export([init/1, waiting/2, registering/2, ready/2, handle_event/3,
@@ -20,7 +20,7 @@
 -define(SERVER, ?MODULE).
 
 %% State record
--record(state, {nick, chans, nick2account}).
+-record(state, {bot, nick2account}).
 
 %% ===================================================================
 %% API
@@ -31,23 +31,9 @@
 %% initialize. To ensure a synchronized start-up procedure, this function
 %% does not return until Module:init/1 has returned.
 %% -------------------------------------------------------------------
-start_link() ->
-    gen_fsm:start_link({global, ?SERVER}, ?MODULE, [], []).
-
-%% -------------------------------------------------------------------
-%% @spec register() -> ok.
-%% @doc Perform the initial registation with the server
-%% -------------------------------------------------------------------
-register() ->
-    gen_fsm:send_event(?SERVER, connected).
-
-%% -------------------------------------------------------------------
-%% @spec process(Data) -> ok.
-%% @doc Handle lines from Connector and Route to Event Manager
-%% -------------------------------------------------------------------
-process(Line) ->
-    gen_fsm:send_event(?SERVER, {recv, Line}),
-    ok.
+start_link(Bot, Id) ->
+    error_logger:info_msg("erb_processor:start_link/1"),
+    gen_fsm:start_link(Id, ?MODULE, [Bot], []).
 
 %% ===================================================================
 %% gen_fsm callbacks
@@ -61,14 +47,10 @@ process(Line) ->
 %% gen_fsm:start_link/3,4, this function is called by the new process to
 %% initialize.
 %% -------------------------------------------------------------------
-init([]) ->
-    case gen_server:call({global, erb_config_server}, {getConfig, bot}) of
-        {ok, {Nick, Chans}} ->
-            {ok, waiting, #state{nick=Nick, chans=Chans, nick2account=ets:new(processor_nick2account, [])}};
-        noconfig ->
-            error_logger:error_msg("[erb_processor] Unable to get configuration~n"),
-            {stop, config_error}
-    end.
+init([Bot]) ->
+    State = #state{bot=Bot, nick2account=ets:new(processor_nick2account, [private])},
+    {ok, waiting, State}.
+
 %% -------------------------------------------------------------------
 %% @spec
 %% state_name(Event, State) -> {next_state, NextStateName, NextState}|
@@ -82,22 +64,27 @@ init([]) ->
 %% called if a timeout occurs.
 %% -------------------------------------------------------------------
 waiting(connected, State) ->
-    ok = gen_server:cast({global, erb_dispatcher}, {register, State#state.nick}),
+    ok = gen_server:cast((State#state.bot)#bot.dispatcher, {register, (State#state.bot)#bot.nick}),
     error_logger:info_msg("erb_processor switching state: waiting->registering~n"),
-    {next_state, registering, State}.
+    {next_state, registering, State};
+waiting(_Request, State) ->
+    {next_state, waiting, State}.
 
 registering({recv, {DateTime, Line}}, State) ->
-    Data = parse_line(DateTime, Line),
+    Data = parse_line(State#state.bot, DateTime, Line),
     case Data#data.operation of
         ping ->
-            ok = gen_server:cast({global, erb_dispatcher}, {pong, Data#data.body}),
+            ok = gen_server:cast((State#state.bot)#bot.dispatcher, {pong, Data#data.body}),
             {next_state, registering, State};
         err_nicknameinuse ->
-            ok = gen_server:cast({global, erb_dispatcher}, {nick, State#state.nick ++ "_"}),
-            {next_state, registering, State#state{nick = State#state.nick ++ "_"}};
+            NewNick = (State#state.bot)#bot.nick ++ "_",
+            NewBot = (State#state.bot)#bot{ nick=NewNick },
+            ok = gen_server:cast((State#state.bot)#bot.dispatcher, {nick, NewNick}),
+            {next_state, registering, State#state{ bot=NewBot }};
         rpl_welcome ->
-            ok = gen_server:cast({global, erb_dispatcher}, {join, State#state.chans}),
-            ok = gen_event:notify({global, erb_router}, Data),
+            Chans = (State#state.bot)#bot.chans,
+            ok = gen_server:cast((State#state.bot)#bot.dispatcher, {join, Chans}),
+            ok = gen_server:cast((State#state.bot)#bot.router, {data, State#state.bot, Data}),
             error_logger:info_msg("erb_processor switching state: registering->ready~n"),
             {next_state, ready, State};
         _ ->
@@ -105,17 +92,18 @@ registering({recv, {DateTime, Line}}, State) ->
     end.
 
 ready({recv, {DateTime, Line}}, State) ->
-    Data = parse_line(DateTime, Line),
+    Data = parse_line(State#state.bot, DateTime, Line),
     Result = case Data#data.operation of
         ping ->
-            ok = gen_server:cast({global, erb_dispatcher}, {pong, Data#data.body}),
+            ok = gen_server:cast((State#state.bot)#bot.dispatcher, {pong, Data#data.body}),
             {next_state, ready, State};
         nickchanged ->
-            {next_state, ready, State#state{nick = Data#data.body}};
+            NewBotState = (State#state.bot)#bot{ nick = Data#data.body },
+            {next_state, ready, State#state{bot = NewBotState }};
         join ->
             case string:tokens(Data#data.origin, "!@") of
                 [Nick,_User,_Host] ->
-                    gen_server:cast({global, erb_dispatcher}, {whois, Nick});
+                    gen_server:cast((State#state.bot)#bot.dispatcher, {whois, Nick});
                 _ ->
                     pass
             end,
@@ -150,7 +138,7 @@ ready({recv, {DateTime, Line}}, State) ->
                 Data
         end
     end,
-    gen_server:cast({global, erb_router}, {data, AugmentedData}),
+    gen_server:cast((State#state.bot)#bot.router, {data, AugmentedData}),
     Result.
 
 %% -------------------------------------------------------------------
@@ -241,7 +229,7 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %% @spec parse_line([$: | Line) -> #data
 %% @doc Parse RAW data into a #data record.
 %% -------------------------------------------------------------------
-parse_line(DateTime, [$: | Line]) ->
+parse_line(Bot, DateTime, [$: | Line]) ->
     BodyPos = string:chr(Line, $:),
     Data = case BodyPos > 0 of
         true ->
@@ -252,12 +240,14 @@ parse_line(DateTime, [$: | Line]) ->
             case length(HeaderBits) of
                 1 ->
                     #data{
+                        bot = Bot,
                         datetime = DateTime,
                         origin = lists:nth(1, HeaderBits),
                         body = Body
                     };
                 2 ->
                     #data{
+                        bot = Bot,
                         datetime = DateTime,
                         origin = lists:nth(1, HeaderBits),
                         operation = irc_lib:operation_to_atom(lists:nth(2, HeaderBits)),
@@ -265,6 +255,7 @@ parse_line(DateTime, [$: | Line]) ->
                     };
                 _ ->
                     #data{
+                        bot = Bot,
                         datetime = DateTime,
                         origin = lists:nth(1, HeaderBits),
                         operation = irc_lib:operation_to_atom(lists:nth(2, HeaderBits)),
@@ -276,6 +267,7 @@ parse_line(DateTime, [$: | Line]) ->
         false ->
             [Origin, Operation, Destination | _] = string:tokens(Line, " "),
             #data{
+                bot = Bot,
                 datetime = DateTime,
                 origin = Origin,
                 operation = irc_lib:operation_to_atom(Operation),
@@ -286,6 +278,8 @@ parse_line(DateTime, [$: | Line]) ->
     case {Data#data.operation, Data#data.body} of
         {privmsg, ["."|_]} ->
             Data#data{
+                bot = Bot,
+                datetime = DateTime,
                 operation = command,
                 body = string:tokens(Data#data.body, " ")
             };
@@ -297,13 +291,14 @@ parse_line(DateTime, [$: | Line]) ->
 %% @spec parse_line([$: | Line) -> #data
 %% @doc Lines not starting with a colon are wrong, PING being the exception
 %% -------------------------------------------------------------------
-parse_line(DateTime, [$P, $I, $N, $G, $\s, $:|Server]) ->
+parse_line(Bot, DateTime, [$P, $I, $N, $G, $\s, $:|Server]) ->
 #data{
-    datetime = DateTime,
+        bot = Bot,
+        datetime = DateTime,
         operation=ping,
         body=Server
     };
 
-parse_line(DateTime, Data) ->
+parse_line(_Bot, DateTime, Data) ->
     error_logger:warning_msg("Malformed Data from Server: ~p ~p~n", [DateTime, Data]),
     #data{operation=malformed, body=Data}.

@@ -5,16 +5,14 @@
 %% -------------------------------------------------------------------
 -module(erb_module_supervisor).
 -author("Will Boyce").
+-include("erb.hrl").
 -behaviour(supervisor).
 
 %% API
--export([start_link/0]).
+-export([start_link/1]).
 
 %% Supervisor callbacks
 -export([init/1]).
-
-% Server macro
--define(SERVER, ?MODULE).
 
 %% ===================================================================
 %% API functions
@@ -23,8 +21,9 @@
 %% @spec start_link() -> {ok,Pid} | ignore | {error,Error}
 %% @doc Starts the supervisor
 %% -------------------------------------------------------------------
-start_link() ->
-    supervisor:start_link({global, ?SERVER}, ?MODULE, []).
+start_link(Bot) ->
+    ProcName = list_to_atom("erb_module_supervisor_" ++ atom_to_list(Bot#bot.id)),
+    supervisor:start_link({global, ProcName}, ?MODULE, [Bot]).
 
 %% ===================================================================
 %% Supervisor callbacks
@@ -38,17 +37,18 @@ start_link() ->
 %% to find out about restart strategy, maximum restart frequency and child
 %% specifications.
 %% -------------------------------------------------------------------
-init([]) ->
-    case gen_server:call({global, erb_config_server}, {getConfig, modules}) of
+init([Bot]) ->
+    ModuleSpecs = case gen_server:call({global, erb_config_server}, {getConfig, Bot#bot.id, modules}) of
         {ok, Modules} ->
-            ChildSpecs = lists:map(fun(M) ->
-                erb_module_manager:gen_spec(M)
-            end, [erb_module_manager] ++ Modules),
-            {ok, {{one_for_one, 5, 60}, ChildSpecs}};
+            lists:map(fun(M) ->
+                erb_module_manager:gen_spec(M, Bot)
+            end, Modules);
         noconfig ->
-            ChildSpecs = [erb_module_manager:gen_spec(erb_module_manager)],
-            {ok, {{one_for_one, 5, 60}, ChildSpecs}}
-    end.
+            []
+    end,
+    ModuleManager = erb_module_manager:gen_spec(erb_module_manager, Bot),
+    ChildSpecs = [ModuleManager|ModuleSpecs],
+    {ok, {{one_for_one, 5, 60}, ChildSpecs}}.
 
 %% ===================================================================
 %% Internal functions

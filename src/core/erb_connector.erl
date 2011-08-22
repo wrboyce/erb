@@ -8,16 +8,13 @@
 -include("erb.hrl").
 
 %% API
--export([start_link/0]).
+-export([start_link/3]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
-%% Server macro
--define(SERVER, ?MODULE).
-
 %% State record
--record(state, {server, port, sock}).
+-record(state, {servers, bot, sock, processor}).
 
 %% ===================================================================
 %% API
@@ -27,8 +24,8 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @doc Starts the server
 %% -------------------------------------------------------------------
-start_link() ->
-    gen_server:start_link({global, ?SERVER}, ?MODULE, [], []).
+start_link(Bot, Id, ProcessorId) ->
+    gen_server:start_link(Id, ?MODULE, [Bot, ProcessorId], []).
 
 
 %% ===================================================================
@@ -41,21 +38,10 @@ start_link() ->
 %%                         {stop, Reason}
 %% @doc Initiates the server
 %% -------------------------------------------------------------------
-init([]) ->
-    case gen_server:call({global, erb_config_server}, {getConfig, server}) of
-        {ok, {Server, Port}} ->
-            error_logger:info_msg("Connecting to ~s:~B...", [Server, Port]),
-            case gen_tcp:connect(Server, Port, [{packet, line}, {active, true}]) of
-                {ok, Sock} ->
-                    error_logger:info_msg("~s:~B connected.~n", [Server, Port]),
-                    gen_fsm:send_event({global, erb_processor}, connected),
-                    {ok, #state{server=Server, port=Port, sock=Sock}};
-                _ ->
-                    {stop, socket_error}
-            end;
-        _ ->
-            {stop, config_error}
-    end.
+init([Bot, ProcessorId]) ->
+    {Servers, Sock} = open_connection(Bot#bot.network),
+    gen_fsm:send_event(ProcessorId, connected),
+    {ok, #state{ servers=Servers, bot=Bot, sock=Sock, processor=ProcessorId }}.
 
 %% -------------------------------------------------------------------
 %% @spec handle_call(Request, From, State) -> {reply, Reply, State} |
@@ -76,7 +62,6 @@ handle_call(_Request, _From, State) ->
 %% @doc Handling cast messages
 %% -------------------------------------------------------------------
 handle_cast({sendline, Data}, State) ->
-    % error_logger:info_msg("TX: ~p~n", [Data]),
     gen_tcp:send(State#state.sock, Data ++ "\r\n"),
     {noreply, State};
 handle_cast(_Request, State) ->
@@ -90,10 +75,9 @@ handle_cast(_Request, State) ->
 %% -------------------------------------------------------------------
 handle_info({tcp, Sock, Data}, State) ->
     Lines = string:tokens(Data, "\r\n"),
-    dispatch(Lines),
-    {noreply, State#state{sock=Sock}};
+    dispatch(State#state.processor, Lines),
+    {noreply, State#state{ sock=Sock }};
 handle_info({tcp_closed, _Sock}, State) ->
-    % init([]), (?)
     {noreply, State};
 handle_info(_Reqest, State) ->
     {noreply, State}.
@@ -124,9 +108,19 @@ code_change(_OldVsn, State, _Extra) ->
 %% @spec dispatch(Lines) -> ok
 %% @doc Dispatch lines to the router
 %% -------------------------------------------------------------------
-dispatch([]) ->
+open_connection(NetworkId) ->
+    {ok, Servers} = gen_server:call({global, erb_config_server}, {getServers, NetworkId}),
+    [{Server, Port}|OtherServers] = Servers,
+    case gen_tcp:connect(Server, Port, [{packet, line}, {active, true}]) of
+        {ok, Sock} ->
+            error_logger:info_msg("~s:~B connected.~n", [Server, Port]),
+            {Servers, Sock};
+        _ ->
+            open_connection(OtherServers)
+    end.
+
+dispatch(_Processor, []) ->
     ok;
-dispatch([Line|Lines]) ->
-    % error_logger:info_msg("RX: ~p~n", [Line]),
-    gen_fsm:send_event({global, erb_processor}, {recv, {calendar:universal_time(), Line}}),
-    dispatch(Lines).
+dispatch(Processor, [Line|Lines]) ->
+    gen_fsm:send_event(Processor, {recv, {calendar:universal_time(), Line}}),
+    dispatch(Processor, Lines).
