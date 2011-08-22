@@ -158,7 +158,7 @@ handle_call(_Request, _From, State) ->
 %% -------------------------------------------------------------------
 handle_cast({addServer, Network, {Host, Port}}, State) ->
     {atomic, ok} = mnesia:transaction(fun() ->
-        mnesia:write(#server{ network=Network, host=Host, port=Port })
+        mnesia:write(#server{ network=Network, host=Host, port=Port, enabled=true })
     end),
     {noreply, State};
 
@@ -172,7 +172,7 @@ handle_cast({putGlobalConfig, Service, Config}, State) ->
 handle_cast({putConfig, Bot, Service, Config}, State) ->
     error_logger:info_msg("Setting configuration: ~p = ~p~n", [Service, Config]),
     {atomic, ok} = mnesia:transaction(fun() ->
-        mnesia:write(config, #config{bot=Bot#bot.id, service=Service, config=Config}, write)
+        mnesia:write(config, #config{bot=Bot#bot.id, service=Service, config=Config, enabled=true}, write)
     end),
     {noreply, State};
 
