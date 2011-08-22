@@ -4,27 +4,25 @@ Erlang/OTP IRC Bot Framework
 
 ## Usage
 
-compile the source:
+compile the source (you'll need rebar):
 
-    $ make
-
-
-start an erlang shell:
-
-    $ erl -pa ebin/
+    % make
 
 
-before running Erb for the first time, you will need to do a few things (replacing the correct stuff where appropriate):
+create a release:
 
-    1> rr("src/core/erb_config_server.erl").
-    2> mnesia:create_table(config, [{type, set}, {disc_copies, [node()]}, {attributes, record_info(fields, config)}]).
-    3> mnesia:dirty_write(#config{service=bot, config={"botnick", ["#chan1", "#chan2"]}}).
-    4> mnesia:dirty_write(#config{service=server, config={"irc.freenode.net", 6667}).
-    5> mnesia:dirty_write(#config{service=handlers, config=[erb_http_handler]}).
+    % make rel
 
 
-load and start the erb application:
+start the erb backend
 
-    1> mnesia:start().
-    2> inets:start(). %% required for erb_http_handler
-    3> application:load(erb), application:start(erb).
+    % rel/erb/bin/erb start
+
+
+When running Erb for the first time, you'll need to do some configuration:
+
+    % rel/erb/bin/erb console
+    1> erb:add_server(network, {"irc.server.com", 6667}).
+    ok
+    2> erb:add_bot("BotNick", network, ["#channel"]).
+    ok

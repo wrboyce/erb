@@ -13,7 +13,7 @@
 -include_lib("xmerl/include/xmerl.hrl").
 
 %% API
--export([start_link/0]).
+-export([set_apikey/1, start_link/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -22,18 +22,20 @@
 -define(SERVER, ?MODULE).
 
 %% State record
--record(state, {apikey, reqchanmap}).
+-record(state, {bot, apikey, reqchanmap}).
 
 %% ===================================================================
 %% API
 %% ===================================================================
+set_apikey(Key) ->
+    gen_server:cast({global, erb_config_server}, {putGlobalConfig, moviedb_apikey, Key}).
 
 %% -------------------------------------------------------------------
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @doc Starts the server
 %% -------------------------------------------------------------------
-start_link() ->
-    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+start_link(Bot) ->
+    gen_server:start_link({local, ?SERVER}, ?MODULE, [Bot], []).
 
 
 %% ===================================================================
@@ -46,15 +48,16 @@ start_link() ->
 %%                         {stop, Reason}
 %% @doc Initiates the server
 %% -------------------------------------------------------------------
-init([]) ->
-    case gen_server:call({global, erb_config_server}, {getConfig, moviedb_apikey}) of
+init([Bot]) ->
+    case gen_server:call({global, erb_config_server}, {getGlobalConfig, moviedb_apikey}) of
         {ok, ApiKey} ->
             application:start(inets),
             State = #state{
+                bot=Bot,
                 apikey=ApiKey,
                 reqchanmap=ets:new(moviedb_reqchanmap, [private, ordered_set])
             },
-            ok = gen_server:call({global, erb_router}, {subscribeToCommand, movie}),
+            ok = gen_server:call(Bot#bot.router, {subscribeToCommand, movie}),
             {ok, State};
         noconfig ->
             {stop, noApiKey}
@@ -122,7 +125,7 @@ handle_info({http, {RequestId, Response}}, State) ->
                             MovieTrailerString,
                             MovieUrl]),
                     error_logger:info_msg("MESSAGE=~p~n", [Message]),
-                    ok = gen_server:cast({global, erb_dispatcher}, {privmsg, Chan, Message});
+                    ok = gen_server:cast((State#state.bot)#bot.dispatcher, {privmsg, Chan, Message});
                 _ ->
                     error
             end,

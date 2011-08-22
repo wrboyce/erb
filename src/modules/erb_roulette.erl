@@ -9,13 +9,16 @@
 -include("erb.hrl").
 
 %% API
--export([start_link/0]).
+-export([start_link/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 %% Server macro
 -define(SERVER, ?MODULE).
+
+%% State record
+-record(state, {bot, gun}).
 
 %% ===================================================================
 %% API
@@ -25,8 +28,8 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @doc Starts the server
 %% -------------------------------------------------------------------
-start_link() ->
-    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+start_link(Bot) ->
+    gen_server:start_link({local, ?SERVER}, ?MODULE, [Bot], []).
 
 
 %% ===================================================================
@@ -39,9 +42,12 @@ start_link() ->
 %%                         {stop, Reason}
 %% @doc Initiates the server
 %% -------------------------------------------------------------------
-init([]) ->
-    ok = gen_server:call({global, erb_router}, {subscribeToCommand, roulette}),
-    State = load_gun(),
+init([Bot]) ->
+    ok = gen_server:call(Bot#bot.router, {subscribeToCommand, roulette}),
+    State = #state{
+        bot=Bot,
+        gun=load_gun()
+    },
     {ok, State}.
 
 %% -------------------------------------------------------------------
@@ -64,13 +70,13 @@ handle_call(_Request, _From, State) ->
 %% -------------------------------------------------------------------
 handle_cast({roulette, Data}, State) ->
     [Nick|_Rest] = string:tokens(Data#data.origin, "!"),
-    [Head|Tail] = State,
-    NewState = case Head of
+    [Head|Tail] = State#state.gun,
+    NewGunState = case Head of
         true ->
-            ok = gen_server:cast({global, erb_dispatcher}, {kick, Data#data.destination, Nick, "*bang*"}),
+            ok = gen_server:cast((State#state.bot)#bot.dispatcher, {kick, Data#data.destination, Nick, "*bang*"}),
             load_gun();
         false ->
-            ok = gen_server:cast({global, erb_dispatcher}, {privmsg, Data#data.destination, io_lib:format("~s: *click*", [Nick])}),
+            ok = gen_server:cast((State#state.bot)#bot.dispatcher, {privmsg, Data#data.destination, io_lib:format("~s: *click*", [Nick])}),
             % if there is only a bullet in the chamber, reset the gun
             case Tail of
                 [true] ->
@@ -79,7 +85,7 @@ handle_cast({roulette, Data}, State) ->
                     Tail
             end
     end,
-    {noreply, NewState};
+    {noreply, State#state{ gun=NewGunState }};
 handle_cast(_Request, State) ->
     {noreply, State}.
 

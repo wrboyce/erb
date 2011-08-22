@@ -9,7 +9,7 @@
 -include("erb.hrl").
 
 %% API
--export([start_link/0]).
+-export([start_link/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -18,7 +18,7 @@
 -define(SERVER, ?MODULE).
 
 %% State record
--record(state, {db}).
+-record(state, {bot, db}).
 
 %% ===================================================================
 %% API
@@ -28,8 +28,8 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @doc Starts the server
 %% -------------------------------------------------------------------
-start_link() ->
-    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+start_link(Bot) ->
+    gen_server:start_link({local, ?SERVER}, ?MODULE, [Bot], []).
 
 
 %% ===================================================================
@@ -42,12 +42,12 @@ start_link() ->
 %%                         {stop, Reason}
 %% @doc Initiates the server
 %% -------------------------------------------------------------------
-init([]) ->
-    ok = gen_server:call({global, erb_router}, {subscribeToOperation, join}),
-    ok = gen_server:call({global, erb_router}, {subscribeToOperation, privmsg}),
-    ok = gen_server:call({global, erb_router}, {subscribeToOperation, part}),
-    ok = gen_server:call({global, erb_router}, {subscribeToCommand, seen}),
-    State = #state{db=ets:new(seen_ets, [set, private])},
+init([Bot]) ->
+    ok = gen_server:call(Bot#bot.router, {subscribeToOperation, join}),
+    ok = gen_server:call(Bot#bot.router, {subscribeToOperation, privmsg}),
+    ok = gen_server:call(Bot#bot.router, {subscribeToOperation, part}),
+    ok = gen_server:call(Bot#bot.router, {subscribeToCommand, seen}),
+    State = #state{ bot=Bot, db=ets:new(seen_ets, [set, private]) },
     {ok, State}.
 
 %% -------------------------------------------------------------------
@@ -102,7 +102,7 @@ handle_cast({seen, Data}, State) ->
             [] ->
                 io_lib:format("I haven't seen ~s.", [Nick])
         end),
-    ok = gen_server:cast({global, erb_dispatcher}, {privmsg, Data#data.destination, Response}),
+    ok = gen_server:cast((State#state.bot)#bot.dispatcher, {privmsg, Data#data.destination, Response}),
     {noreply, State};
 handle_cast(_Request, State) ->
     {noreply, State}.
