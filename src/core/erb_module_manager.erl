@@ -180,7 +180,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% Internal functions
 %% ===================================================================
 gen_spec(M, Bot) ->
-    {M, {M, start_link, [Bot]}, permanent, 2000, worker, [M]}.
+    {M, {M, start_link, [Bot]}, temporary, 2000, worker, [M]}.
 
 unload_mod(State, Module, Modules) ->
     case sets:is_element(Module, Modules) of
