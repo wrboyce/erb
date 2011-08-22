@@ -41,13 +41,13 @@ start_link(Bot) ->
 %% @doc Initiates the server
 %% -------------------------------------------------------------------
 init(Bot) ->
-    Modules = case gen_server:call({global, erb_config_server}, {getConfig, Bot, modules}) of
+    Modules = case gen_server:call({global, erb_config_server}, {getConfig, Bot#bot.id, modules}) of
         {ok, Mods} ->
             Mods;
         noconfig ->
             []
     end,
-    Admins = case gen_server:call({global, erb_config_server}, {getConfig, Bot, admins}) of
+    Admins = case gen_server:call({global, erb_config_server}, {getConfig, Bot#bot.id, admins}) of
         {ok, Adms} ->
             Adms;
         noconfig ->

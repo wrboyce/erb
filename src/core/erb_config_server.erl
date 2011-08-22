@@ -115,7 +115,7 @@ handle_call({getConfig, Bot, Service}, _From, State) ->
     Q = qlc:q([
         C#config.config || C <- mnesia:table(config),
             C#config.service =:= Service,
-            C#config.bot =:= Bot#bot.id
+            C#config.bot =:= Bot
     ]),
     {atomic, Result} = mnesia:transaction(fun() -> qlc:e(Q) end),
     Reply = case Result of

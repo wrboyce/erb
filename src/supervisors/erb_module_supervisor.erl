@@ -38,7 +38,7 @@ start_link(Bot) ->
 %% specifications.
 %% -------------------------------------------------------------------
 init([Bot]) ->
-    ModuleSpecs = case gen_server:call({global, erb_config_server}, {getConfig, Bot, modules}) of
+    ModuleSpecs = case gen_server:call({global, erb_config_server}, {getConfig, Bot#bot.id, modules}) of
         {ok, Modules} ->
             lists:map(fun(M) ->
                 erb_module_manager:gen_spec(M, Bot)
