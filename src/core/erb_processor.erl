@@ -67,7 +67,7 @@ waiting(connected, State) ->
     ok = gen_server:cast((State#state.bot)#bot.dispatcher, {register, (State#state.bot)#bot.nick}),
     error_logger:info_msg("erb_processor switching state: waiting->registering~n"),
     {next_state, registering, State};
-waiting(Request, State) ->
+waiting(_Request, State) ->
     {next_state, waiting, State}.
 
 registering({recv, {DateTime, Line}}, State) ->
