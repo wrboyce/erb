@@ -8,7 +8,7 @@
 -include("erb.hrl").
 
 %% API
--export([start_link/0]).
+-export([start_link/1]).
 -include_lib("xmerl/include/xmerl.hrl").
 
 %% gen_server callbacks
@@ -18,7 +18,7 @@
 -define(SERVER, ?MODULE).
 
 %% State record
--record(state, {reqchanmap}).
+-record(state, {bot, reqchanmap}).
 
 %% ===================================================================
 %% API
@@ -28,8 +28,8 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @doc Starts the server
 %% -------------------------------------------------------------------
-start_link() ->
-    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+start_link(Bot) ->
+    gen_server:start_link({local, ?SERVER}, ?MODULE, [Bot], []).
 
 
 %% ===================================================================
@@ -42,10 +42,9 @@ start_link() ->
 %%                         {stop, Reason}
 %% @doc Initiates the server
 %% -------------------------------------------------------------------
-init([]) ->
-    application:start(inets),
-    ok = gen_server:call({global, erb_router}, {subscribeToUrls, "twitter.com"}),
-    State = #state{ reqchanmap=ets:new(web_titler_reqchanmap, [ordered_set]) },
+init([Bot]) ->
+    ok = gen_server:call(Bot#bot.router, {subscribeToUrls, "twitter.com"}),
+    State = #state{ bot=Bot, reqchanmap=ets:new(web_titler_reqchanmap, [ordered_set]) },
     {ok, State}.
 
 %% -------------------------------------------------------------------
@@ -98,7 +97,7 @@ handle_info({http, {RequestId, Response}}, State) ->
                     {BodyNode, _} = xmerl_scan:string(BodyString),
                     [StatusTextNode] = xmerl_xpath:string("//status/text", BodyNode),
                     Message = io_lib:format("[twitter.com/~s] ~s", [TwitterUser, (lists:nth(1, StatusTextNode#xmlElement.content))#xmlText.value]),
-                    ok = gen_server:cast({global, erb_dispatcher}, {privmsg, Chan, Message});
+                    ok = gen_server:cast((State#state.bot)#bot.dispatcher, {privmsg, Chan, Message});
                 _ ->
                     error
             end,
