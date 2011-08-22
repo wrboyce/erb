@@ -49,7 +49,7 @@ init([]) ->
             []
     end,
     lists:map(fun(Bot) ->
-        start_bot(Bot)
+        gen_server:cast(self(), {startBot, Bot})
     end, Bots),
     {ok, #state{bots=Bots}}.
 
@@ -71,6 +71,9 @@ handle_call(_Request, _From, State) ->
 %%                                      {stop, Reason, State}
 %% @doc Handling cast messages
 %% -------------------------------------------------------------------
+handle_cast({startBot, Bot}, State) ->
+    ok = start_bot(Bot),
+    {noreply, State};
 handle_cast(_Request, State) ->
     {noreply, State}.
 
