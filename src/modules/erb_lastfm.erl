@@ -13,7 +13,7 @@
 -include_lib("xmerl/include/xmerl.hrl").
 
 %% API
--export([start_link/0]).
+-export([start_link/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -22,7 +22,7 @@
 -define(SERVER, ?MODULE).
 
 %% State record
--record(state, {reqchanmap}).
+-record(state, {bot, reqchanmap}).
 %% LastFM Aliases (nick->username)
 -record(lastalias, {nick, user}).
 
@@ -34,8 +34,8 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @doc Starts the server
 %% -------------------------------------------------------------------
-start_link() ->
-    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+start_link(Bot) ->
+    gen_server:start_link({local, ?SERVER}, ?MODULE, [Bot], []).
 
 
 %% ===================================================================
@@ -48,12 +48,12 @@ start_link() ->
 %%                         {stop, Reason}
 %% @doc Initiates the server
 %% -------------------------------------------------------------------
-init([]) ->
-    ok = gen_server:call({global, erb_router}, {subscribeToCommand, last}),
-    ok = gen_server:call({global, erb_router}, {subscribeToCommand, lastalias}),
-    application:start(inets),
+init([Bot]) ->
+    ok = gen_server:call(Bot#bot.router, {subscribeToCommand, last}),
+    ok = gen_server:call(Bot#bot.router, {subscribeToCommand, lastalias}),
     mnesia:create_table(lastalias, [{type, set}, {disc_copies, [node()]}, {attributes, record_info(fields, lastalias)}]),
     State = #state{
+        bot=Bot,
         reqchanmap=ets:new(reqchanmap_ets, [private, ordered_set])
     },
     {ok, State}.
@@ -126,7 +126,7 @@ handle_info({http, {RequestId, Response}}, State) ->
                     Message = io_lib:format("[http://last.fm/user/~s] ~s - ~s", [User,
                         (lists:nth(1, RecentTrackArtistNode#xmlElement.content))#xmlText.value,
                         (lists:nth(1, RecentTrackNameNode#xmlElement.content))#xmlText.value]),
-                    ok = gen_server:cast({global, erb_dispatcher}, {privmsg, Chan, Message});
+                    ok = gen_server:cast((State#state.bot)#bot.dispatcher, {privmsg, Chan, Message});
                 _ ->
                     error
             end,
