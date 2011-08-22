@@ -9,16 +9,13 @@
 -include("erb.hrl").
 
 %% API
--export([start_link/0, gen_spec/1]).
+-export([start_link/1, gen_spec/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
-%% Server macro
--define(SERVER, ?MODULE).
-
 %% State record
--record(state, {modules, admins}).
+-record(state, {bot, supervisor, dispatcher, modules, admins}).
 
 %% ===================================================================
 %% API
@@ -28,8 +25,9 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @doc Starts the server
 %% -------------------------------------------------------------------
-start_link() ->
-    gen_server:start_link({global, ?SERVER}, ?MODULE, [], []).
+start_link(Bot) ->
+    ProcName = list_to_atom("erb_module_manager_" ++ atom_to_list(Bot#bot.id)),
+    gen_server:start_link({global, ProcName}, ?MODULE, Bot, []).
 
 
 %% ===================================================================
@@ -42,24 +40,25 @@ start_link() ->
 %%                         {stop, Reason}
 %% @doc Initiates the server
 %% -------------------------------------------------------------------
-init([]) ->
-    Modules = case gen_server:call({global, erb_config_server}, {getConfig, modules}) of
+init(Bot) ->
+    Modules = case gen_server:call({global, erb_config_server}, {getConfig, Bot, modules}) of
         {ok, Mods} ->
             Mods;
         noconfig ->
             []
     end,
-    Admins = case gen_server:call({global, erb_config_server}, {getConfig, admins}) of
+    Admins = case gen_server:call({global, erb_config_server}, {getConfig, Bot, admins}) of
         {ok, Adms} ->
             Adms;
         noconfig ->
             []
     end,
-    gen_server:call({global, erb_router}, {subscribeToCommand, modules}),
-    gen_server:call({global, erb_router}, {subscribeToCommand, loadmod}),
-    gen_server:call({global, erb_router}, {subscribeToCommand, unloadmod}),
-    gen_server:call({global, erb_router}, {subscribeToCommand, reloadmod}),
-    State = #state{ modules = sets:from_list(Modules), admins = Admins },
+    gen_server:call(Bot#bot.router, {subscribeToCommand, modules}),
+    gen_server:call(Bot#bot.router, {subscribeToCommand, loadmod}),
+    gen_server:call(Bot#bot.router, {subscribeToCommand, unloadmod}),
+    gen_server:call(Bot#bot.router, {subscribeToCommand, reloadmod}),
+    Supervisor = {global, list_to_atom("erb_module_supervisor_" ++ atom_to_list(Bot#bot.id))},
+    State = #state{ bot=Bot, supervisor=Supervisor, dispatcher=Bot#bot.dispatcher, modules=sets:from_list(Modules), admins=Admins },
     {ok, State}.
 
 %% -------------------------------------------------------------------
@@ -83,7 +82,7 @@ handle_call(_Request, _From, State) ->
 handle_cast({modules, Data}, State) ->
     ModuleStrings = lists:map(fun(Module) -> atom_to_list(Module) end, sets:to_list(State#state.modules)),
     Message = io_lib:format("[modules] ~s", [string:join(ModuleStrings, ", ")]),
-    gen_server:cast({global, erb_dispatcher}, {privmsg, Data#data.destination, Message}),
+    gen_server:cast(State#state.dispatcher, {privmsg, Data#data.destination, Message}),
     {noreply, State};
 handle_cast({loadmod, Data}, State) ->
     UserId = Data#data.account,
@@ -91,10 +90,10 @@ handle_cast({loadmod, Data}, State) ->
         true ->
             [ModuleString|_] = Data#data.body,
             Module = list_to_atom(ModuleString),
-            case load_mod(Module, State#state.modules) of
+            case load_mod(State, Module, State#state.modules) of
                 {ok, NewModules} ->
                     Message = io_lib:format("[loadmod] module \"~s\" loaded.", [Module]),
-                    gen_server:cast({global, erb_dispatcher}, {privmsg, Data#data.destination, Message}),
+                    gen_server:cast(State#state.dispatcher, {privmsg, Data#data.destination, Message}),
                     State#state{ modules = NewModules };
                 {error, _} ->
                     State
@@ -109,10 +108,10 @@ handle_cast({unloadmod, Data}, State) ->
         true ->
             [ModuleString|_] = Data#data.body,
             Module = list_to_atom(ModuleString),
-            case unload_mod(Module, State#state.modules) of
+            case unload_mod(State, Module, State#state.modules) of
                 {ok, NewModules} ->
                     Message = io_lib:format("[unloadmod] module \"~s\" unloaded.", [Module]),
-                    gen_server:cast({global, erb_dispatcher}, {privmsg, Data#data.destination, Message}),
+                    gen_server:cast(State, {privmsg, Data#data.destination, Message}),
                     State#state{ modules = NewModules };
                 {error, _Reason} ->
                     State
@@ -127,18 +126,18 @@ handle_cast({reloadmod, Data}, State) ->
         true ->
             [ModuleString|_] = Data#data.body,
             Module = list_to_atom(ModuleString),
-            TransientState = case unload_mod(Module, State#state.modules) of
+            TransientState = case unload_mod(State, Module, State#state.modules) of
                 {ok, NewModules} ->
                     UnloadMessage = io_lib:format("[reloadmod] module \"~s\" unloaded.", [Module]),
-                    gen_server:cast({global, erb_dispatcher}, {privmsg, Data#data.destination, UnloadMessage}),
+                    gen_server:cast(State#state.dispatcher, {privmsg, Data#data.destination, UnloadMessage}),
                     State#state{ modules = NewModules };
                 {error, not_loaded} ->
                     State
             end,
-            case load_mod(Module, TransientState#state.modules) of
+            case load_mod(State, Module, TransientState#state.modules) of
                 {ok, NewerModules} ->
                     LoadMessage = io_lib:format("[reloadmod] module \"~s\" loaded.", [Module]),
-                    gen_server:cast({global, erb_dispatcher}, {privmsg, Data#data.destination, LoadMessage}),
+                    gen_server:cast(State#state.dispatcher, {privmsg, Data#data.destination, LoadMessage}),
                     State#state{ modules = NewerModules };
                 {error, already_loaded} ->
                     TransientState;
@@ -183,32 +182,32 @@ code_change(_OldVsn, State, _Extra) ->
 %% ===================================================================
 %% Internal functions
 %% ===================================================================
-gen_spec(M) ->
-    {M, {M, start_link, []}, permanent, 2000, worker, [M]}.
+gen_spec(M,B) ->
+    {M, {M, start_link, [B]}, permanent, 2000, worker, [M]}.
 
-unload_mod(Module, Modules) ->
+unload_mod(State, Module, Modules) ->
     case sets:is_element(Module, Modules) of
         true ->
-            supervisor:terminate_child({global, erb_module_supervisor}, Module),
-            supervisor:delete_child({global, erb_module_supervisor}, Module),
+            supervisor:terminate_child(State#state.supervisor, Module),
+            supervisor:delete_child(State#state.supervisor, Module),
             NewModules = sets:del_element(Module, Modules),
-            gen_server:cast({global, erb_config_server}, {putConfig, modules, sets:to_list(NewModules)}),
+            gen_server:cast({global, erb_config_server}, {putConfig, State#state.bot, modules, sets:to_list(NewModules)}),
             {ok, NewModules};
         false ->
             {error, not_loaded}
     end.
 
-load_mod(Module, Modules) ->
+load_mod(State, Module, Modules) ->
     case sets:is_element(Module, Modules) of
         true ->
             {error, already_loaded};
         false ->
             case code:load_file(Module) of
                 {module, Module} ->
-                    ChildSpec = erb_module_manager:gen_spec(Module),
-                    supervisor:start_child({global, erb_module_supervisor}, ChildSpec),
+                    ChildSpec = erb_module_manager:gen_spec(Module, State#state.bot),
+                    supervisor:start_child(State#state.supervisor, ChildSpec),
                     NewModules = sets:add_element(Module, Modules),
-                    gen_server:cast({global, erb_config_server}, {putConfig, modules, sets:to_list(NewModules)}),
+                    gen_server:cast({global, erb_config_server}, {putConfig, State#state.bot, modules, sets:to_list(NewModules)}),
                     {ok, NewModules};
                 {error, Reason} ->
                     {error, Reason}

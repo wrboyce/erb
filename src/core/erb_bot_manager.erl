@@ -1,17 +1,13 @@
 %% -------------------------------------------------------------------
-%% @author Will Boyce <mail@willboyce.com> [http://willboyce.com]
-%% @copyright 2008 Will Boyce
-%% @doc Erb Configuration Server
+%% @author Will Boyce <me@willboyce.com> [http://willboyce.com]
+%% @copyright 2011 Will Boyce
+%% @doc Manages multiple bot configurations
 %% -------------------------------------------------------------------
--module(erb_config_server).
--author("Will Boyce").
+-module(erb_bot_manager).
 -behaviour(gen_server).
 -include("erb.hrl").
 
-%% Include Files
--include_lib("stdlib/include/qlc.hrl").
-
-%% Exported functions
+%% API
 -export([start_link/0]).
 
 %% gen_server callbacks
@@ -20,15 +16,15 @@
 %% Server macro
 -define(SERVER, ?MODULE).
 
-%% Records
--record(state, {}).
--record(config, {service, config, bot}).
+%% State record
+-record(state, {bots}).
 
 %% ===================================================================
 %% API
 %% ===================================================================
+
 %% -------------------------------------------------------------------
-%% @spec start_link() -> {ok,Pid} | ignore | {error,Error}
+%% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @doc Starts the server
 %% -------------------------------------------------------------------
 start_link() ->
@@ -46,12 +42,16 @@ start_link() ->
 %% @doc Initiates the server
 %% -------------------------------------------------------------------
 init([]) ->
-    application:start(mnesia),
-    mnesia:create_schema([node()]),
-    mnesia:create_table(bot_config, [{type, set}, {disc_copies, [node()]}, {attributes, record_info(fields, bot_config)}]),
-    mnesia:create_table(config, [{type, set}, {disc_copies, [node()]}, {attributes, record_info(fields, config)}]),
-    mnesia:create_table(network, [{type, set}, {disc_copies, [node()]}, {attributes, record_info(fields, network)}]),
-    {ok, #state{}}.
+    Bots = case gen_server:call({global, erb_config_server}, getBots) of
+        {ok, Config} ->
+            Config;
+        _ ->
+            []
+    end,
+    lists:map(fun(Bot) ->
+        start_bot(Bot)
+    end, Bots),
+    {ok, #state{bots=Bots}}.
 
 %% -------------------------------------------------------------------
 %% @spec handle_call(Request, From, State) -> {reply, Reply, State} |
@@ -62,51 +62,8 @@ init([]) ->
 %%                                      {stop, Reason, State}
 %% @doc Handling call messages
 %% -------------------------------------------------------------------
-handle_call({getConfig, Bot, Service}, _From, State) ->
-    error_logger:info_msg("Retrieving configuration: ~p", [Service]),
-    Q = qlc:q([
-        C#config.config || C <- mnesia:table(config),
-            C#config.service =:= Service,
-            C#config.bot =:= Bot#bot.id
-    ]),
-    {atomic, Result} = mnesia:transaction(fun() -> qlc:e(Q) end),
-    Reply = case Result of
-        [Config] ->
-            error_logger:info_msg("Got configuration: ~p = ~p~n", [Service, Config]),
-            {ok, Config};
-        [] ->
-            error_logger:warning_msg("No configuration found: ~p~n", [Service]),
-            noconfig
-    end,
-    {reply, Reply, State};
-
-handle_call(getBots, _From, State) ->
-    Q = qlc:q([
-        #bot{
-            id=C#bot_config.id,
-            network=C#bot_config.network,
-            nick=C#bot_config.nick,
-            chans=C#bot_config.chans
-        } || C <- mnesia:table(bot_config),
-        C#bot_config.enabled =:= true]),
-        {atomic, Bots} = mnesia:transaction(fun() -> qlc:e(Q) end),
-        {reply, {ok, Bots}, State};
-
-handle_call({getNetwork, NetworkId}, _From, State) ->
-    Q = qlc:q([N || N <- mnesia:table(network),
-        N#network.id =:= NetworkId]),
-        {atomic, Result} = mnesia:transaction(fun() -> qlc:e(Q) end),
-        Reply = case Result of
-            [Network] ->
-                {ok, Network};
-            [] ->
-                {error, unknown_network}
-        end,
-        {reply, Reply, State};
-
 handle_call(_Request, _From, State) ->
-    Reply = ok,
-    {reply, Reply, State}.
+    {ok, State}.
 
 %% -------------------------------------------------------------------
 %% @spec handle_cast(Msg, State) -> {noreply, State} |
@@ -114,14 +71,7 @@ handle_call(_Request, _From, State) ->
 %%                                      {stop, Reason, State}
 %% @doc Handling cast messages
 %% -------------------------------------------------------------------
-handle_cast({putConfig, Bot, Service, Config}, State) ->
-    error_logger:info_msg("Setting configuration: ~p = ~p~n", [Service, Config]),
-    {atomic, ok} = mnesia:transaction(fun() ->
-        mnesia:write(config, #config{bot=Bot#bot.id, service=Service, config=Config}, write)
-    end),
-    {noreply, State};
-
-handle_cast(_Msg, State) ->
+handle_cast(_Request, State) ->
     {noreply, State}.
 
 %% -------------------------------------------------------------------
@@ -130,11 +80,11 @@ handle_cast(_Msg, State) ->
 %%                                       {stop, Reason, State}
 %% @doc Handling all non call/cast messages
 %% -------------------------------------------------------------------
-handle_info(_Info, State) ->
+handle_info(_Reqest, State) ->
     {noreply, State}.
 
 %% -------------------------------------------------------------------
-%% @spec terminate(Reason, State) -> void()
+%% @spec terminate(Reason, State) -> ok
 %% @doc This function is called by a gen_server when it is about to
 %% terminate. It should be the opposite of Module:init/1 and do any necessary
 %% cleaning up. When it returns, the gen_server terminates with Reason.
@@ -144,12 +94,25 @@ terminate(_Reason, _State) ->
     ok.
 
 %% -------------------------------------------------------------------
-%% Func: code_change(OldVsn, State, Extra) -> {ok, NewState}
+%% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
 %% @doc Convert process state when code is changed
 %% -------------------------------------------------------------------
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
+
 %% ===================================================================
-%%  Internal functions
+%% Internal functions
 %% ===================================================================
+start_bot(Bot) ->
+    ChildSpec = {list_to_atom("erb_bot_supervisor_" ++ atom_to_list(Bot#bot.id)),
+            {erb_bot_supervisor, start_link, [Bot]},
+            permanent,
+            infinity,
+            supervisor,
+            [erb_bot_supervisor]},
+    error_logger:info_msg("Starting bot \"~p\"... ", [Bot#bot.id]),
+    error_logger:info_msg("~n~n~p~n~n", [ChildSpec]),
+    supervisor:start_child({global, erb_supervisor}, ChildSpec),
+    error_logger:info_msg("done~n"),
+    ok.

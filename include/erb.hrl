@@ -1,12 +1,36 @@
 %% -------------------------------------------------------------------
-%% @author Will Boyce <mail@willboyce.com> [http://willboyce.com]
-%% @copyright 2008 Will Boyce
+%% @author Will Boyce <me@willboyce.com> [http://willboyce.com]
+%% @copyright 2008-11 Will Boyce
 %% @doc Erb Record Definitions
 %% -------------------------------------------------------------------
 -author("Will Boyce").
 
+%% @doc Active Bot
+-record(bot, {
+        id,
+        network, %% #network.id
+        connected_ts=undefined,
+        nick,
+        chans,
+        router=undefined,
+        dispatcher=undefined}).
+
+%% @doc Bot configuration
+-record(bot_config, {
+        id,
+        network,
+        nick,
+        chans,
+        enabled}).
+
+%% @doc IRC Network
+-record(network, {
+        id,
+        servers}).
+
 %% @doc Data record representing a line from the server
 -record(data, {
+        bot,
         datetime,
         origin,
         operation,

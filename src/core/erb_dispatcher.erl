@@ -11,16 +11,13 @@
 -include("erb.hrl").
 
 %% API
--export([start_link/0]).
+-export([start_link/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
-%% Server macro
--define(SERVER, ?MODULE).
-
 %% State record
--record(state, {}).
+-record(state, {connector}).
 
 %% ===================================================================
 %% API
@@ -29,8 +26,9 @@
 %% @spec start_link() -> {ok,Pid} | ignore | {error,Error}
 %% @doc Starts the server
 %% -------------------------------------------------------------------
-start_link() ->
-    gen_server:start_link({global, ?SERVER}, ?MODULE, [], []).
+start_link(Bot, Connector) ->
+    error_logger:info_msg("I AM YOUR MOOSE"),
+    gen_server:start_link(Bot#bot.dispatcher, ?MODULE, [Connector], []).
 
 %% ===================================================================
 %% gen_server callbacks
@@ -42,8 +40,8 @@ start_link() ->
 %%                         {stop, Reason}
 %% @doc Initiates the server
 %% -------------------------------------------------------------------
-init([]) ->
-    {ok, #state{}}.
+init([Connector]) ->
+    {ok, #state{ connector=Connector }}.
 
 %% -------------------------------------------------------------------
 %% @spec %% handle_call(Request, From, State) -> {reply, Reply, State} |
@@ -65,34 +63,34 @@ handle_call(_Request, _From, State) ->
 %% @doc Handling cast messages
 %% -------------------------------------------------------------------
 handle_cast({pong, Server}, State) ->
-    ok = gen_server:cast({global, erb_connector}, {sendline, irc_lib:pong(Server)}),
+    ok = gen_server:cast(State#state.connector, {sendline, irc_lib:pong(Server)}),
     {noreply, State};
 
 handle_cast({register, Nick}, State) ->
     error_logger:info_msg("Registering with server as ~s...~n", [Nick]),
-    ok = gen_server:cast({global, erb_connector}, {sendline, irc_lib:register(Nick)}),
-    ok = gen_server:cast({global, erb_connector}, {sendline, irc_lib:register(Nick, "localhost", "localhost", "Erb [http://github.com/wrboyce/erb]")}),
+    ok = gen_server:cast(State#state.connector, {sendline, irc_lib:register(Nick)}),
+    ok = gen_server:cast(State#state.connector, {sendline, irc_lib:register(Nick, "localhost", "localhost", "Erb [http://github.com/wrboyce/erb]")}),
     {noreply, State};
 
 handle_cast({nick, Nick}, State) ->
-    gen_server:cast({global, erb_connector}, {sendline, irc_lib:register(Nick)}),
+    gen_server:cast(State#state.connector, {sendline, irc_lib:register(Nick)}),
     {noreply, State};
 
 handle_cast({whois, Nick}, State) ->
-    gen_server:cast({global, erb_connector}, {sendline, irc_lib:whois(Nick)}),
+    gen_server:cast(State#state.connector, {sendline, irc_lib:whois(Nick)}),
     {noreply, State};
 
 handle_cast({privmsg, Dest, Message}, State) ->
-    gen_server:cast({global, erb_connector}, {sendline, irc_lib:privmsg(Dest, Message)}),
+    gen_server:cast(State#state.connector, {sendline, irc_lib:privmsg(Dest, Message)}),
     {noreply, State};
 
 handle_cast({kick, Dest, Nick, Reason}, State) ->
-    gen_server:cast({global, erb_connector}, {sendline, irc_lib:kick(Dest, Nick, Reason)}),
+    gen_server:cast(State#state.connector, {sendline, irc_lib:kick(Dest, Nick, Reason)}),
     {noreply, State};
 
 handle_cast({join, Chans}, State) ->
     error_logger:info_msg("Joining chans: ~s~n", [string:join(Chans, ", ")]),
-    ok = gen_server:cast({global, erb_connector}, {sendline, irc_lib:join(Chans)}),
+    ok = gen_server:cast(State#state.connector, {sendline, irc_lib:join(Chans)}),
     {noreply, State};
 
 handle_cast(Msg, State) ->
