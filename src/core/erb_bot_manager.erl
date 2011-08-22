@@ -8,7 +8,7 @@
 -include("erb.hrl").
 
 %% API
--export([start_link/0, start_bot/1]).
+-export([start_link/0, gen_spec/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -17,7 +17,7 @@
 -define(SERVER, ?MODULE).
 
 %% State record
--record(state, {bots}).
+-record(state, {bots=[]}).
 
 %% ===================================================================
 %% API
@@ -29,7 +29,6 @@
 %% -------------------------------------------------------------------
 start_link() ->
     gen_server:start_link({global, ?SERVER}, ?MODULE, [], []).
-
 
 %% ===================================================================
 %% gen_server callbacks
@@ -51,7 +50,7 @@ init([]) ->
     lists:map(fun(Bot) ->
         gen_server:cast(self(), {startBot, Bot})
     end, Bots),
-    {ok, #state{bots=Bots}}.
+    {ok, #state{}}.
 
 %% -------------------------------------------------------------------
 %% @spec handle_call(Request, From, State) -> {reply, Reply, State} |
@@ -71,8 +70,22 @@ handle_call(_Request, _From, State) ->
 %%                                      {stop, Reason, State}
 %% @doc Handling cast messages
 %% -------------------------------------------------------------------
+%% @doc add a new bot to the database/state and start it
+handle_cast({addBot, Nick, Network, Chans}, State) ->
+    BotSpec = {Nick, Network, Chans},
+    {ok, NewBot} = gen_server:call({global, erb_config_server}, {addBot, BotSpec}),
+    ok = start_bot(NewBot),
+    {noreply, State#state{ bots=[State#state.bots|NewBot] }};
+%% @doc starts a bot, which should already exist inside the State
 handle_cast({startBot, Bot}, State) ->
     ok = start_bot(Bot),
+    {noreply, State};
+handle_cast({stopBot, Bot}, State) ->
+    ok = stop_bot(Bot),
+    {noreply, State};
+handle_cast({removeBot, Bot}, State) ->
+    ok = gen_server:call({global, erb_config_server}, {removeBot, Bot#bot.id}),
+    ok = stop_bot(Bot),
     {noreply, State};
 handle_cast(_Request, State) ->
     {noreply, State}.
@@ -107,12 +120,20 @@ code_change(_OldVsn, State, _Extra) ->
 %% ===================================================================
 %% Internal functions
 %% ===================================================================
-start_bot(Bot) ->
-    ChildSpec = {list_to_atom("erb_bot_supervisor_" ++ atom_to_list(Bot#bot.id)),
+gen_spec(Bot) ->
+    {Bot#bot.id,
             {erb_bot_supervisor, start_link, [Bot]},
             permanent,
             infinity,
             supervisor,
-            [erb_bot_supervisor]},
+            [erb_bot_supervisor]}.
+
+start_bot(Bot) ->
+    ChildSpec = gen_spec(Bot),
     supervisor:start_child({global, erb_supervisor}, ChildSpec),
+    ok.
+
+stop_bot(Bot) ->
+    supervisor:stop_child({global, erb_supervisor}, Bot#bot.id),
+    supervisor:delete_child({global, erb_supervisor}, Bot#bot.id),
     ok.
