@@ -110,6 +110,24 @@ handle_call({getServers, NetworkId}, _From, State) ->
     end,
     {reply, Reply, State};
 
+handle_call({getGlobalConfig, Service}, _From, State) ->
+    error_logger:info_msg("Retrieving global configuration: ~p", [Service]),
+    Q = qlc:q([
+        C#config.config || C <- mnesia:table(config),
+            C#config.service =:= Service,
+            C#config.bot =:= '_global'
+    ]),
+    {atomic, Result} = mnesia:transaction(fun() -> qlc:e(Q) end),
+    Reply = case Result of
+        [Config] ->
+            error_logger:info_msg("Got global configuration: ~p = ~p~n", [Service, Config]),
+            {ok, Config};
+        [] ->
+            error_logger:warning_msg("No global configuration found: ~p~n", [Service]),
+            noconfig
+    end,
+    {reply, Reply, State};
+
 handle_call({getConfig, Bot, Service}, _From, State) ->
     error_logger:info_msg("Retrieving configuration: ~p", [Service]),
     Q = qlc:q([
@@ -143,6 +161,14 @@ handle_cast({addServer, Network, {Host, Port}}, State) ->
         mnesia:write(#server{ network=Network, host=Host, port=Port })
     end),
     {noreply, State};
+
+handle_cast({putGlobalConfig, Service, Config}, State) ->
+    error_logger:info_msg("Setting global configuration: ~p = ~p~n", [Service, Config]),
+    {atomic, ok} = mnesia:transaction(fun() ->
+        mnesia:write(config, #config{bot='_global', service=Service, config=Config, enabled=true}, write)
+    end),
+    {noreply, State};
+
 handle_cast({putConfig, Bot, Service, Config}, State) ->
     error_logger:info_msg("Setting configuration: ~p = ~p~n", [Service, Config]),
     {atomic, ok} = mnesia:transaction(fun() ->
