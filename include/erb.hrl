@@ -15,19 +15,6 @@
         router=undefined,
         dispatcher=undefined}).
 
-%% @doc Bot configuration
--record(bot_config, {
-        id,
-        network,
-        nick,
-        chans,
-        enabled}).
-
-%% @doc IRC Network
--record(network, {
-        id,
-        servers}).
-
 %% @doc Data record representing a line from the server
 -record(data, {
         bot,

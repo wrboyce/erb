@@ -109,14 +109,14 @@ code_change(_OldVsn, State, _Extra) ->
 %% @doc Dispatch lines to the router
 %% -------------------------------------------------------------------
 open_connection(NetworkId) ->
-    {ok, Network} = gen_server:call({global, erb_config_server}, {getNetwork, NetworkId}),
-    [{Server, Port}|OtherServers] = Network#network.servers,
+    {ok, Servers} = gen_server:call({global, erb_config_server}, {getServers, NetworkId}),
+    [{Server, Port}|OtherServers] = Servers,
     case gen_tcp:connect(Server, Port, [{packet, line}, {active, true}]) of
         {ok, Sock} ->
             error_logger:info_msg("~s:~B connected.~n", [Server, Port]),
-            {Network#network.servers, Sock};
+            {Servers, Sock};
         _ ->
-            open_connection(Network#network{ servers = OtherServers })
+            open_connection(OtherServers)
     end.
 
 dispatch(_Processor, []) ->
