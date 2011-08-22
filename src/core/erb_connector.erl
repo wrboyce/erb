@@ -122,6 +122,5 @@ open_connection(NetworkId) ->
 dispatch(_Processor, []) ->
     ok;
 dispatch(Processor, [Line|Lines]) ->
-    % error_logger:info_msg("RX: ~p~n", [Line]),
     gen_fsm:send_event(Processor, {recv, {calendar:universal_time(), Line}}),
     dispatch(Processor, Lines).

@@ -32,7 +32,7 @@
 %% does not return until Module:init/1 has returned.
 %% -------------------------------------------------------------------
 start_link(Bot, Id) ->
-    error_logger:info_msg("make way for the processor"),
+    error_logger:info_msg("erb_processor:start_link/1"),
     gen_fsm:start_link(Id, ?MODULE, [Bot], []).
 
 %% ===================================================================

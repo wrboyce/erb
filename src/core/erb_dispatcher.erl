@@ -27,7 +27,6 @@
 %% @doc Starts the server
 %% -------------------------------------------------------------------
 start_link(Bot, Connector) ->
-    error_logger:info_msg("I AM YOUR MOOSE"),
     gen_server:start_link(Bot#bot.dispatcher, ?MODULE, [Connector], []).
 
 %% ===================================================================

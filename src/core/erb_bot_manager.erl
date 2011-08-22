@@ -111,8 +111,5 @@ start_bot(Bot) ->
             infinity,
             supervisor,
             [erb_bot_supervisor]},
-    error_logger:info_msg("Starting bot \"~p\"... ", [Bot#bot.id]),
-    error_logger:info_msg("~n~n~p~n~n", [ChildSpec]),
     supervisor:start_child({global, erb_supervisor}, ChildSpec),
-    error_logger:info_msg("done~n"),
     ok.

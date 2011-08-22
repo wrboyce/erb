@@ -140,9 +140,6 @@ handle_cast({reloadmod, Data}, State) ->
                     gen_server:cast(State#state.dispatcher, {privmsg, Data#data.destination, LoadMessage}),
                     State#state{ modules = NewerModules };
                 {error, already_loaded} ->
-                    TransientState;
-                Other ->
-                    error_logger:info_msg("wtf? ~p", [Other]),
                     TransientState
             end;
         false ->
