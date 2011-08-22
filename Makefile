@@ -17,9 +17,8 @@ test:
 
 
 ## Release Targets
-rel: deps
-	cd rel
-	rebar compile generate
+rel: all
+	cd rel && rebar generate
 
 relclean:
 	rm -rf rel/erb
