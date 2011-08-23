@@ -69,6 +69,7 @@ init([]) ->
     mnesia:create_table(bot_config, [{type, set}, {disc_copies, [node()]}, {attributes, record_info(fields, bot_config)}]),
     mnesia:create_table(config, [{type, set}, {disc_copies, [node()]}, {attributes, record_info(fields, config)}]),
     mnesia:create_table(server, [{type, set}, {disc_copies, [node()]}, {attributes, record_info(fields, server)}]),
+    ok = mnesia:wait_for_tables([bot_config,server,config], 5000),
     {ok, #state{}}.
 
 %% -------------------------------------------------------------------
@@ -94,9 +95,9 @@ handle_call(getBots, _From, State) ->
     Q = qlc:q([
         C || C <- mnesia:table(bot_config),
         C#bot_config.enabled =:= true]),
-        {atomic, BotConfigs} = mnesia:transaction(fun() -> qlc:e(Q) end),
-        Bots = lists:map(fun(C) -> bot_from_config(C) end, BotConfigs),
-        {reply, {ok, Bots}, State};
+    {atomic, BotConfigs} = mnesia:transaction(fun() -> qlc:e(Q) end),
+    Bots = lists:map(fun(C) -> bot_from_config(C) end, BotConfigs),
+    {reply, {ok, Bots}, State};
 
 handle_call({getServers, NetworkId}, _From, State) ->
     Q = qlc:q([{S#server.host, S#server.port} || S <- mnesia:table(server),
